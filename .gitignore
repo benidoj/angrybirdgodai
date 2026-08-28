@@ -4,3 +4,7 @@ podcasts/
 # Freebuff preview logs
 .freebuff/*.log
 .freebuff/*.log.err
+
+# Large model files (distribute separately)
+*.onnx
+*.bin
