@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#171412" />
+    <meta name="description" content="A private, local AI workspace powered by Ollama and LiquidAI LFM2.5." />
+    <title>angrybirdgodai — private local AI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+        <div class="brand-row">
+          <a class="brand" href="#" aria-label="AngryBirdGodAI home" id="brandButton">
+            <span class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 40 40" fill="none">
+                <circle cx="20" cy="20" r="18" fill="#FF4E35" />
+                <path d="M9.5 16.1c3.5-4.8 10.1-7.3 16.2-5.5 5.4 1.6 8.7 6.7 8.7 11.9 0 2.7-.7 5.3-2.1 7.5-3.2-.9-5.9-2.2-8.1-4.1-3.2 1.4-7.3 1.6-11.2-.2 1.1-2.3 1.4-4.7.8-7.2-1.7-.6-3.1-1.4-4.3-2.4Z" fill="#261916" />
+                <circle cx="24.8" cy="17.1" r="2.4" fill="#FFF7EF" />
+                <circle cx="25.4" cy="17.3" r="1" fill="#261916" />
+                <path d="m8.2 16.1 7.1 1.2-5.8 4.2-3.1-1.7 1.8-3.7Z" fill="#FFB642" />
+                <path d="M13.2 10.4 10.8 5l5.7 3.1 1-4.9 2.5 6.1-6.8 1.1Z" fill="#FFB642" />
+              </svg>
+            </span>
+            <span class="brand-name">angrybird<span>god</span><b>ai</b></span>
+          </a>
+          <button class="icon-button close-sidebar" id="closeSidebarButton" type="button" aria-label="Close navigation">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+
+        <button class="new-chat-button" id="newChatButton" type="button">
+          <span class="plus-icon" aria-hidden="true">+</span>
+          <span>New chat</span>
+          <kbd>⌘ K</kbd>
+        </button>
+
+        <nav class="primary-nav" aria-label="Workspace">
+          <button class="nav-item" id="homeButton" type="button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 10 8-6 8 6v9a1 1 0 0 1-1 1h-4.2v-6h-5.6v6H5a1 1 0 0 1-1-1v-9Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+            <span>Home</span>
+          </button>
+          <button class="nav-item" id="podcastButton" type="button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a5 5 0 0 1 5 5v4a5 5 0 0 1-10 0V8a5 5 0 0 1 5-5Z" stroke="currentColor" stroke-width="1.6"/><path d="M5 11v1a7 7 0 0 0 14 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <span>Podcast</span>
+          </button>
+          <button class="nav-item" id="notesButton" type="button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4h9l4 4v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 4v4h4M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Notes</span>
+          </button>
+          <button class="nav-item" id="searchButton" type="button">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.4" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.3 4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <span>Search chats</span>
+            <kbd>⌘ K</kbd>
+          </button>
+        </nav>
+
+        <div class="sidebar-divider"></div>
+        <div class="section-heading">
+          <span>Your chats</span>
+          <button class="tiny-button" id="clearChatsButton" type="button" aria-label="Clear all chats" title="Clear all chats">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M10 11v6m4-6v6M8 7l.7 12h6.6L16 7m-6.5 0V4.8c0-.4.3-.8.8-.8h3.4c.5 0 .8.4.8.8V7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <div class="conversation-list" id="conversationList" aria-live="polite"></div>
+
+        <div class="sidebar-bottom">
+          <div class="local-card" id="localCard">
+            <span class="status-dot" id="sideStatusDot"></span>
+            <div>
+              <strong id="sideStatusText">Checking Ollama</strong>
+              <span>Local model + sources</span>
+            </div>
+            <button class="tiny-button" id="sideSettingsButton" type="button" aria-label="Open settings">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.6"/><path d="m19.1 13.4 1.2.9-1.8 3.1-1.4-.6a7.7 7.7 0 0 1-1.7 1l-.2 1.5h-3.6l-.2-1.5a7.7 7.7 0 0 1-1.7-1l-1.4.6-1.8-3.1 1.2-.9a7.2 7.2 0 0 1 0-2.8l-1.2-.9 1.8-3.1 1.4.6a7.7 7.7 0 0 1 1.7-1l.2-1.5h3.6l.2 1.5a7.7 7.7 0 0 1 1.7 1l1.4-.6 1.8 3.1-1.2.9a7.2 7.2 0 0 1 0 2.8Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <button class="profile-row" type="button" id="profileButton">
+            <span class="profile-avatar">A</span>
+            <span class="profile-copy"><strong>Andre's workspace</strong><small>Personal</small></span>
+            <svg class="profile-chevron" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+
+        <div class="diagnostics-panel hidden" id="diagnosticsPanel">
+          <div class="diagnostics-header">
+            <span class="diagnostics-title">System diagnostics</span>
+            <button class="diagnostics-close" id="diagnosticsCloseButton" type="button" aria-label="Close diagnostics">&times;</button>
+          </div>
+          <div class="diagnostics-list" id="diagnosticsList"></div>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div class="topbar-left">
+            <button class="icon-button menu-button" id="menuButton" type="button" aria-label="Open navigation">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </button>
+            <div class="workspace-crumb">
+              <span class="crumb-avatar">A</span>
+              <span>Personal workspace</span>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <strong id="crumbTitle">angrybirdgodai</strong>
+            </div>
+          </div>
+          <div class="topbar-right">
+            <div class="connection-pill" id="connectionPill">
+              <span class="status-dot"></span>
+              <span id="connectionText">Connecting</span>
+            </div>
+            <button class="icon-button" id="topSettingsButton" type="button" aria-label="Open settings" title="Settings">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.6"/><path d="m19.1 13.4 1.2.9-1.8 3.1-1.4-.6a7.7 7.7 0 0 1-1.7 1l-.2 1.5h-3.6l-.2-1.5a7.7 7.7 0 0 1-1.7-1l-1.4.6-1.8-3.1 1.2-.9a7.2 7.2 0 0 1 0-2.8l-1.2-.9 1.8-3.1 1.4.6a7.7 7.7 0 0 1 1.7-1l.2-1.5h3.6l.2 1.5a7.7 7.7 0 0 1 1.7 1l1.4-.6 1.8 3.1-1.2.9a7.2 7.2 0 0 1 0 2.8Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/></svg>
+            </button>
+            <span class="top-avatar">A</span>
+          </div>
+        </header>
+
+        <section class="chat-area" id="chatArea">
+          <section class="hero-view" id="heroView">
+            <div class="hero-glow glow-one"></div>
+            <div class="hero-glow glow-two"></div>
+            <div class="hero-content">
+              <div class="hero-kicker"><span class="kicker-dot"></span> LOCAL-FIRST · LIVE SOURCES <span class="kicker-line"></span> <span id="heroModelName">LFM2.5 · 2.6B</span></div>
+              <h1>Ask anything.<br /><em>Keep it yours.</em></h1>
+              <p class="hero-subtitle">A calm place to think with your local AI.<br />Your model stays local; web research adds fresh sources.</p>
+              <div class="suggestion-grid" aria-label="Suggested prompts">
+                <button class="suggestion-card" type="button" data-prompt="Help me brainstorm five bold ideas for a project I care about.">
+                  <span class="suggestion-icon coral"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9.2 18.2h5.6M10 21h4M8.2 14.8c-1.4-1-2.2-2.5-2.2-4.3a6 6 0 1 1 12 0c0 1.8-.8 3.3-2.2 4.3-.8.6-1 1.1-1 1.8h-5.6c0-.7-.2-1.2-1-1.8Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                  <span><strong>Brainstorm ideas</strong><small>Turn a blank page into momentum</small></span>
+                  <svg class="card-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button class="suggestion-card" type="button" data-prompt="Explain a difficult concept to me simply, then give me a real-world example.">
+                  <span class="suggestion-icon amber"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.5 6.8A2.8 2.8 0 0 1 7.3 4h9.4a2.8 2.8 0 0 1 2.8 2.8v7.4a2.8 2.8 0 0 1-2.8 2.8H11l-4.1 3v-3.1a2.8 2.8 0 0 1-2.4-2.7V6.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 9.5h8M8 13h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+                  <span><strong>Learn something</strong><small>Make the complex feel clear</small></span>
+                  <svg class="card-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button class="suggestion-card" type="button" data-prompt="Write a concise, confident first draft for the idea I am about to describe.">
+                  <span class="suggestion-icon gold"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14.2 5.2 4.6 4.6M5 19l3.1-.7L19.3 7.1a2.2 2.2 0 0 0-3.1-3.1L5.7 16.9 5 19Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                  <span><strong>Write with me</strong><small>Give your words some bite</small></span>
+                  <svg class="card-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button class="suggestion-card" type="button" data-prompt="Help me turn my goals for this week into a simple, realistic plan.">
+                  <span class="suggestion-icon mint"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4.5" y="5" width="15" height="15" rx="2.4" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.5v3M16 4.5v3M8 11h8M8 15h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+                  <span><strong>Make a plan</strong><small>Find the next right move</small></span>
+                  <svg class="card-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section class="thread-view hidden" id="threadView" aria-live="polite">
+            <div class="messages" id="messages"></div>
+            <div class="thread-end" id="threadEnd"></div>
+          </section>
+
+          <div class="composer-dock" id="composerDock">
+            <form class="composer-form" id="chatForm">
+              <input id="fileInput" class="file-input" type="file" multiple accept=".txt,.md,.markdown,.csv,.tsv,.json,.xml,.yaml,.yml,.js,.jsx,.ts,.tsx,.html,.css,.scss,.less,.sql,.py,.java,.c,.cpp,.h,.hpp,.rs,.go,.sh,.bat,.ps1,.log,.rtf,text/*,application/json,application/xml" />
+              <div class="attachment-list" id="attachmentList" aria-live="polite"></div>
+              <div class="composer-box" id="composerBox">
+                <textarea id="messageInput" rows="1" autocomplete="off" placeholder="Message AngryBirdGodAI..."></textarea>
+                <div class="composer-actions">
+                  <button class="composer-tool" id="attachButton" type="button" aria-label="Attach a text file" title="Attach a text file">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9.5 12.5 4.7-4.7a3 3 0 0 1 4.3 4.3l-6.8 6.8a4.5 4.5 0 0 1-6.4-6.4l7-7a3.5 3.5 0 0 1 5 5l-6.4 6.4a2 2 0 0 1-2.8-2.8l5.5-5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <button class="composer-tool voice-button" id="voiceButton" type="button" aria-label="Speak a message" title="Speak a message">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3.5" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                  </button>
+                  <button class="composer-tool" id="wakeButton" type="button" aria-label="Listen for Great Sage" title="Listen for 'Great Sage'">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10v4M8 6.5v11M12 4v16M16 6.5v11M20 10v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                  </button>
+                  <button class="composer-tool" id="generationButton" type="button" aria-label="Open generation controls" title="Generation controls">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="9" cy="7" r="2" fill="#28211E" stroke="currentColor" stroke-width="1.6"/><circle cx="15" cy="12" r="2" fill="#28211E" stroke="currentColor" stroke-width="1.6"/><circle cx="11" cy="17" r="2" fill="#28211E" stroke="currentColor" stroke-width="1.6"/></svg>
+                  </button>
+                  <button class="deep-toggle" id="deepToggle" type="button" aria-pressed="false" title="Deep research for this message only">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="5.5" stroke="currentColor" stroke-width="1.7"/><path d="m15 15 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 7.5v6M7.5 10.5h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                    <span>Deep</span>
+                  </button>
+                  <button class="model-chip" id="modelChip" type="button" aria-label="Open model settings">
+                    <span class="model-chip-dot"></span>
+                    <span id="composerModelName">LFM2.5 · 2.6B</span>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <button class="send-button" id="sendButton" type="submit" aria-label="Send message">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 4 9.2 14.8M20 4l-3.1 16-7.7-5.2L4 12.4 20 4Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div class="voice-status hidden" id="voiceStatus" role="status" aria-live="polite"></div>
+              <div class="wake-status hidden" id="wakeStatus" role="status" aria-live="polite"></div>
+              <div class="composer-meta">
+                <span><span class="meta-shield">✦</span> Runs locally on your machine <span class="meta-separator">·</span> <span class="generation-summary" id="generationSummary">Balanced · 0.7 temp · 8k context</span> <span class="meta-separator">·</span> <span class="research-summary" id="researchSummary">Web research + citations on</span></span>
+                <span><kbd>Enter</kbd> to send <span class="meta-separator">·</span> <kbd>Shift Enter</kbd> for a new line</span>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="notes-view hidden" id="notesView" aria-label="Notes">
+          <div class="notes-toolbar">
+            <div class="notes-title">
+              <span class="notes-title-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M6 4h9l4 4v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 4v4h4M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <div>
+                <h2>Notes</h2>
+                <p id="notesCount">0 notes</p>
+              </div>
+            </div>
+            <div class="notes-toolbar-actions">
+              <label class="notes-search" for="notesSearchInput">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.4" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.3 4.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                <input id="notesSearchInput" type="search" placeholder="Search notes…" autocomplete="off" />
+              </label>
+              <div class="notes-export-group">
+                <select class="notes-export-select" id="notesExportFormat" aria-label="Notes export format" title="Choose notes export format">
+                  <option value="markdown">Markdown file</option>
+                  <option value="zip">ZIP archive</option>
+                </select>
+                <button class="notes-export-button" id="exportNotesButton" type="button" aria-label="Export all notes" title="Export all notes">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v11M8 11l4 4 4-4M5 20h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span>Export</span>
+                </button>
+              </div>
+              <button class="new-note-button" id="newNoteButton" type="button">
+                <span class="plus-icon" aria-hidden="true">+</span>
+                <span>New note</span>
+              </button>
+            </div>
+          </div>
+          <div class="notes-body">
+            <div class="notes-list-pane" aria-label="Notes list">
+              <div class="notes-list" id="notesList" aria-live="polite"></div>
+            </div>
+            <div class="note-editor-pane">
+              <div class="note-editor-empty" id="noteEditorEmpty">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4h9l4 4v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 4v4h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <strong>No note selected</strong>
+                <p>Pick a note from the list, or create a new one to start writing.</p>
+              </div>
+              <div class="note-editor hidden" id="noteEditor">
+                <div class="note-editor-top">
+                  <button class="icon-button note-back-button" id="noteBackButton" type="button" aria-label="Back to notes list" title="Back to notes">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 6-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <div class="note-editor-meta" id="noteEditorMeta"></div>
+                  <button class="tiny-button note-delete-button" id="deleteNoteButton" type="button" aria-label="Delete note" title="Delete note">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14M10 11v6m4-6v6M8 7l.7 12h6.6L16 7m-6.5 0V4.8c0-.4.3-.8.8-.8h3.4c.5 0 .8.4.8.8V7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </div>
+                <input class="note-title-input" id="noteTitleInput" type="text" placeholder="Note title" maxlength="180" autocomplete="off" />
+                <textarea class="note-content-input" id="noteContentInput" placeholder="Write your note here…"></textarea>
+                <div class="note-editor-footer">
+                  <span class="note-save-status" id="noteSaveStatus">Saved</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="podcast-view hidden" id="podcastView" aria-label="Podcast studio">
+          <div class="podcast-toolbar">
+            <div class="podcast-title">
+              <span class="podcast-title-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M12 3a5 5 0 0 1 5 5v4a5 5 0 0 1-10 0V8a5 5 0 0 1 5-5Z" stroke="currentColor" stroke-width="1.6"/><path d="M5 11v1a7 7 0 0 0 14 0v-1M12 19v3M9 22h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              </span>
+              <div>
+                <h2>Podcast studio</h2>
+                <p>Researches the topic, writes a two-host episode, and turns it into audio</p>
+              </div>
+            </div>
+          </div>
+          <div class="podcast-body">
+            <div class="podcast-config">
+              <label class="field-label" for="podcastTopicInput">Topic</label>
+              <input class="podcast-topic-input" id="podcastTopicInput" type="text" placeholder="e.g. Warum schlafen wir? · How do black holes work?" maxlength="400" autocomplete="off" />
+              <div class="podcast-controls">
+                <div class="podcast-control">
+                  <label class="field-label" for="podcastLengthInput">Length</label>
+                  <select class="control-select" id="podcastLengthInput">
+                    <option value="short">Short · ~1 min</option>
+                    <option value="medium" selected>Medium · ~3 min</option>
+                    <option value="long">Long · ~5 min</option>
+                  </select>
+                </div>
+                <div class="podcast-control">
+                  <label class="field-label" for="podcastVoice1Input">Host 1 voice</label>
+                  <select class="control-select" id="podcastVoice1Input"></select>
+                </div>
+                <div class="podcast-control">
+                  <label class="field-label" for="podcastVoice2Input">Host 2 voice</label>
+                  <select class="control-select" id="podcastVoice2Input"></select>
+                </div>
+              </div>
+              <div class="podcast-actions">
+                <button class="primary-button" id="podcastGenerateButton" type="button">Generate podcast</button>
+                <button class="secondary-button podcast-cancel hidden" id="podcastCancelButton" type="button">Cancel</button>
+                <span class="podcast-status" id="podcastStatus" role="status" aria-live="polite"></span>
+              </div>
+            </div>
+            <div class="podcast-output hidden" id="podcastOutput">
+              <div class="podcast-output-head">
+                <strong>Episode script</strong>
+                <div class="podcast-output-actions">
+                  <button class="tiny-button" id="podcastCopyButton" type="button">Copy</button>
+                  <button class="tiny-button" id="podcastSaveNoteButton" type="button">Save to notes</button>
+                </div>
+              </div>
+              <textarea class="podcast-script" id="podcastScript" spellcheck="false" aria-label="Episode script"></textarea>
+              <div class="podcast-player" id="podcastPlayer">
+                <button class="primary-button" id="podcastPlayButton" type="button">▶ Listen (browser voices)</button>
+                <button class="secondary-button hidden" id="podcastWavButton" type="button">Generate .wav (Kokoro)</button>
+                <a class="secondary-button hidden" id="podcastDownloadButton" href="#" download="podcast.wav">⬇ Download .wav</a>
+                <audio class="podcast-audio hidden" id="podcastAudio" controls preload="none"></audio>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop hidden" id="settingsModal" role="presentation">
+      <section class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal-header">
+          <div>
+            <span class="modal-eyebrow">LOCAL CONFIGURATION</span>
+            <h2 id="settingsTitle">Your AI, your rules.</h2>
+          </div>
+          <button class="icon-button" id="closeSettingsButton" type="button" aria-label="Close settings">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <p class="modal-description">AngryBirdGodAI researches the web before each answer and shows the source links below it. Your prompt is sent to the local model and to DuckDuckGo for research.</p>
+        <label class="field-label" for="endpointInput">Ollama endpoint</label>
+        <div class="field-wrap"><span class="field-prefix">↗</span><input id="endpointInput" type="text" spellcheck="false" /></div>
+        <label class="field-label" for="modelInput">Model tag</label>
+        <div class="field-wrap"><span class="field-prefix">◎</span><input id="modelInput" type="text" spellcheck="false" /></div>
+        <div class="model-hint"><span class="hint-dot"></span><span>Expected model: <code>hf.co/LiquidAI/LFM2.5-2.6B-GGUF:Q4_K_M</code></span></div>
+        <label class="field-label" for="visionModelInput">Vision model tag (optional)</label>
+        <div class="field-wrap"><span class="field-prefix">👁</span><input id="visionModelInput" type="text" spellcheck="false" placeholder="e.g. llama3.2-vision" /></div>
+        <div class="model-hint"><span class="hint-dot"></span><span>When set, the AI describes example images before embedding them. Leave empty to disable image understanding. Try <code>ollama run llama3.2-vision</code> or <code>minicpm-v</code>.</span></div>
+        <label class="research-setting" for="researchEnabledInput">
+          <span class="research-setting-copy">
+            <strong>Research before every answer</strong>
+            <small>Search the web first and require citations for factual replies</small>
+          </span>
+          <span class="speech-toggle">
+            <input id="researchEnabledInput" type="checkbox" checked />
+            <span class="speech-toggle-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="research-setting" for="analysisResearchInput">
+          <span class="research-setting-copy">
+            <strong>Analysis mode</strong>
+            <small>Collects 100+ sources and writes a very detailed, cited report</small>
+          </span>
+          <span class="speech-toggle">
+            <input id="analysisResearchInput" type="checkbox" />
+            <span class="speech-toggle-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <label class="research-setting" for="deepResearchInput">
+          <span class="research-setting-copy">
+            <strong>Deep research mode</strong>
+            <small>Runs multiple searches, reads the top pages in full, and writes a structured cited report</small>
+          </span>
+          <span class="speech-toggle">
+            <input id="deepResearchInput" type="checkbox" />
+            <span class="speech-toggle-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <div class="generation-controls">
+          <div class="control-heading">
+            <span>Generation controls</span>
+            <small>Applied to every new reply</small>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="responseStyleInput">Response style</label>
+              <span class="control-value" id="responseStyleValue">Balanced</span>
+            </div>
+            <select class="control-select" id="responseStyleInput">
+              <option value="balanced">Balanced</option>
+              <option value="concise">Concise</option>
+              <option value="detailed">Detailed</option>
+              <option value="creative">Creative</option>
+            </select>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="temperatureInput">Temperature</label>
+              <output class="control-value" id="temperatureValue" for="temperatureInput">0.7</output>
+            </div>
+            <input class="control-range" id="temperatureInput" type="range" min="0" max="1.5" step="0.1" value="0.7" />
+            <div class="range-scale"><span>Precise</span><span>Expressive</span></div>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="contextLengthInput">Context length</label>
+              <span class="control-value" id="contextLengthValue">8k tokens</span>
+            </div>
+            <select class="control-select" id="contextLengthInput">
+              <option value="4096">4k tokens · lighter memory use</option>
+              <option value="8192">8k tokens · balanced</option>
+              <option value="16384">16k tokens · longer chats</option>
+              <option value="32768">32k tokens · extended context</option>
+              <option value="65536">64k tokens · heavy memory use</option>
+              <option value="131072">128k tokens · maximum context</option>
+              <option value="262144">256k tokens · analysis mode</option>
+              <option value="524288">512k tokens · maximum analysis</option>
+            </select>
+          </div>
+        </div>
+        <label class="speech-setting" for="autoReadInput">
+          <span class="speech-setting-copy">
+            <strong>Read replies aloud</strong>
+            <small>Automatically speak each completed response</small>
+          </span>
+          <span class="speech-toggle">
+            <input id="autoReadInput" type="checkbox" />
+            <span class="speech-toggle-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <div class="speech-controls generation-controls" id="speechControls">
+          <div class="control-heading">
+            <span>Speech output</span>
+            <small>Read aloud + Great Sage acknowledgments</small>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="ttsBackendInput">TTS engine</label>
+              <span class="control-value" id="ttsBackendValue">Browser</span>
+            </div>
+            <select class="control-select" id="ttsBackendInput">
+              <option value="browser">Browser built-in</option>
+              <option value="kokoro">Kokoro-FastAPI</option>
+              <option value="fish">Fish Audio (Great Sage)</option>
+            </select>
+          </div>
+          <div class="control-row kokoro-only" id="kokoroEndpointRow" hidden>
+            <label class="field-label" for="kokoroEndpointInput">Kokoro endpoint</label>
+            <input class="control-text" id="kokoroEndpointInput" type="text" value="http://localhost:8880" placeholder="http://localhost:8880" spellcheck="false" />
+          </div>
+          <div class="control-row kokoro-only" id="kokoroVoiceRow" hidden>
+            <div class="control-label-row">
+              <label class="field-label" for="kokoroVoiceInput">Kokoro voice</label>
+              <span class="control-value" id="kokoroVoiceValue">af_heart</span>
+            </div>
+            <select class="control-select" id="kokoroVoiceInput">
+              <option value="great_sage">🧘 great_sage — custom blend (Great Sage)</option>
+              <option value="af_nicole">af_nicole — American female, calm</option>
+              <option value="af_heart">af_heart — American female, warm</option>
+              <option value="af_bella">af_bella — American female, clear</option>
+              <option value="af_sarah">af_sarah — American female, soft</option>
+              <option value="af_sky">af_sky — American female, bright</option>
+              <option value="af">af — American female, default</option>
+              <option value="bf">bf — British female</option>
+              <option value="am_adam">am_adam — American male</option>
+              <option value="am_michael">am_michael — American male, deep</option>
+            </select>
+          </div>
+          <div class="control-row fish-only" id="fishApiKeyRow" hidden>
+            <label class="field-label" for="fishApiKeyInput">Fish Audio API key</label>
+            <input class="control-text" id="fishApiKeyInput" type="password" placeholder="Get a free key at fish.audio/app/api-keys" spellcheck="false" />
+          </div>
+          <div class="control-row fish-only" id="fishReferenceRow" hidden>
+            <label class="field-label" for="fishReferenceInput">Voice model ID (reference_id)</label>
+            <input class="control-text" id="fishReferenceInput" type="text" placeholder="e.g. 4c82a14548dc4b3e8d7dda68c9756c90" spellcheck="false" />
+          </div>
+          <div class="control-row fish-only" id="fishStatusRow" hidden>
+            <span class="field-note">Free tier (<code>s2.1-pro-free</code>). Get the model ID from the fish.audio voice page URL. Great Sage: <code>4c82a14548dc4b3e8d7dda68c9756c90</code></span>
+          </div>
+          <div class="control-row kokoro-only" id="kokoroStatusRow" hidden>
+            <span class="field-note" id="kokoroStatusNote">Kokoro neural TTS running locally. <code>great_sage</code> is a custom 5-voice blend (af_nicole + bf_emma + af_kore + af_bella + af_sky) tuned for the Great Sage persona.</span>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label">Voice preset</label>
+              <span class="control-value" id="speechPresetLabel">None</span>
+            </div>
+            <div class="preset-row">
+              <button class="preset-btn" id="greatSagePresetBtn" type="button">🧘 Great Sage</button>
+              <button class="preset-btn" id="speechPresetResetBtn" type="button">↩ Reset</button>
+            </div>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="speechVoiceInput">Voice</label>
+              <span class="control-value" id="speechVoiceValue">System default</span>
+            </div>
+            <select class="control-select" id="speechVoiceInput">
+              <option value="">System default</option>
+            </select>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="speechRateInput">Speed</label>
+              <output class="control-value" id="speechRateValue" for="speechRateInput">1.0×</output>
+            </div>
+            <input class="control-range" id="speechRateInput" type="range" min="0.5" max="2" step="0.1" value="1" />
+            <div class="range-scale"><span>Slower</span><span>Faster</span></div>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="speechPitchInput">Pitch</label>
+              <output class="control-value" id="speechPitchValue" for="speechPitchInput">1.0</output>
+            </div>
+            <input class="control-range" id="speechPitchInput" type="range" min="0.5" max="2" step="0.1" value="1" />
+            <div class="range-scale"><span>Lower</span><span>Higher</span></div>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="speechVolumeInput">Volume</label>
+              <output class="control-value" id="speechVolumeValue" for="speechVolumeInput">1.0</output>
+            </div>
+            <input class="control-range" id="speechVolumeInput" type="range" min="0.1" max="1" step="0.05" value="1" />
+            <div class="range-scale"><span>Quiet</span><span>Loud</span></div>
+          </div>
+        </div>
+        <label class="wake-setting" for="autoWakeInput">
+          <span class="wake-setting-copy">
+            <strong>Auto-start “Great Sage” listening</strong>
+            <small>Begin wake-word listening when the page loads</small>
+          </span>
+          <span class="speech-toggle">
+            <input id="autoWakeInput" type="checkbox" />
+            <span class="speech-toggle-track" aria-hidden="true"></span>
+          </span>
+        </label>
+        <div class="modal-status" id="modalStatus"></div>
+        <div class="modal-actions">
+          <button class="secondary-button" id="checkConnectionButton" type="button">Test connection</button>
+          <button class="secondary-button" id="runDiagnosticsButton" type="button">Run diagnostics</button>
+          <button class="save-button" id="saveSettingsButton" type="button">Save settings</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="toast hidden" id="toast" role="status"></div>
+
+    <div class="great-sage-avatar great-sage-off" id="greatSageAvatar" role="button" tabindex="0" aria-label="Great Sage — click to stop reading aloud, or start reading the latest reply" title="Great Sage: click to stop / read the last reply aloud">
+      <div class="great-sage-bubble" id="greatSageBubble" aria-hidden="true"></div>
+      <div class="great-sage-swirl" aria-hidden="true"></div>
+      <div class="great-sage-rings"><span></span><span></span><span></span></div>
+      <div class="great-sage-figure sage-3d-scene" aria-hidden="true">
+        <svg class="sage-layer sage-layer-deep" viewBox="0 0 120 170" fill="none">
+          <g class="sage-panels" fill="#cfe8e0">
+            <rect x="14" y="58" width="12" height="7" opacity="0.16" />
+            <rect x="90" y="40" width="11" height="6" opacity="0.2" />
+            <rect x="86" y="118" width="12" height="7" opacity="0.15" />
+            <rect x="18" y="112" width="10" height="6" opacity="0.18" />
+            <rect x="48" y="10" width="14" height="6" opacity="0.14" />
+            <rect x="64" y="150" width="12" height="6" opacity="0.16" />
+          </g>
+          <circle class="sage-mote" cx="26" cy="58" r="1.4" fill="#a8ecd8" />
+          <circle class="sage-mote" cx="95" cy="78" r="1.2" fill="#a8ecd8" style="animation-delay: 1.1s" />
+          <circle class="sage-mote" cx="32" cy="104" r="1" fill="#a8ecd8" style="animation-delay: 2.2s" />
+          <circle class="sage-mote" cx="90" cy="38" r="1" fill="#a8ecd8" style="animation-delay: 3s" />
+        </svg>
+        <svg class="sage-layer sage-layer-mid" viewBox="0 0 120 170" fill="none">
+          <g class="sage-spokes" stroke="#eafff5" stroke-width="0.8" opacity="0.65">
+            <path d="M60 61 L60 4" />
+            <path d="M84 85 L120 85" />
+            <path d="M36 85 L2 85" />
+            <path d="M60 109 L60 166" />
+            <path d="M80.8 73 L126 46" />
+            <path d="M39.2 73 L14 30" />
+            <path d="M80.8 97 L120 122" />
+            <path d="M39.2 97 L6 118" />
+            <path d="M72 64 L98 22" />
+            <path d="M48 64 L30 12" />
+            <path d="M72 106 L92 144" />
+            <path d="M48 106 L34 148" />
+          </g>
+          <g class="sage-swoosh" fill="none" stroke="#ffffff">
+            <path d="M16 44 A50 50 0 0 1 92 26" stroke-width="5" opacity="0.3" />
+            <path d="M104 128 A50 50 0 0 1 30 142" stroke-width="4" opacity="0.25" />
+          </g>
+        </svg>
+        <svg class="sage-layer sage-layer-outer" viewBox="0 0 120 170" fill="none">
+          <polygon class="sage-hex-outer" points="60,23 114,54 114,116 60,147 6,116 6,54" stroke="#eafff5" stroke-width="1.2" opacity="0.85" />
+          <polygon class="sage-hex-inner" points="92,85 76,112.7 44,112.7 28,85 44,57.3 76,57.3" stroke="#eafff5" stroke-width="0.9" opacity="0.8" />
+          <g class="sage-eyes">
+            <circle cx="6" cy="54" r="2.4" fill="#ffffff" />
+            <circle cx="114" cy="54" r="2.4" fill="#ffffff" />
+          </g>
+          <g fill="#ffffff" opacity="0.9">
+            <circle cx="60" cy="23" r="2" />
+            <circle cx="114" cy="116" r="2" />
+            <circle cx="60" cy="147" r="2" />
+            <circle cx="6" cy="116" r="2" />
+            <circle cx="87" cy="38.5" r="1.4" />
+            <circle cx="114" cy="85" r="1.4" />
+            <circle cx="87" cy="131.5" r="1.4" />
+            <circle cx="33" cy="131.5" r="1.4" />
+            <circle cx="6" cy="85" r="1.4" />
+            <circle cx="33" cy="38.5" r="1.4" />
+          </g>
+        </svg>
+        <svg class="sage-layer sage-layer-inner" viewBox="0 0 120 170" fill="none">
+          <g class="sage-cells" fill="#eafff5" opacity="0.85">
+            <rect x="94" y="70" width="3" height="3" />
+            <rect x="40" y="62" width="3" height="3" />
+            <rect x="76" y="124" width="3" height="3" />
+            <rect x="30" y="100" width="3" height="3" />
+            <rect x="53" y="30" width="3" height="3" />
+            <rect x="64" y="128" width="3" height="3" />
+          </g>
+        </svg>
+        <svg class="sage-layer sage-layer-core" viewBox="0 0 120 170" fill="none">
+          <defs>
+            <radialGradient id="sageAura" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#f4fffb" stop-opacity="1" />
+              <stop offset="18%" stop-color="#bdf0e0" stop-opacity="0.55" />
+              <stop offset="45%" stop-color="#3f7a6d" stop-opacity="0.3" />
+              <stop offset="100%" stop-color="#1c3f38" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+          <circle class="sage-aura" cx="60" cy="85" r="55" fill="url(#sageAura)" />
+          <circle cx="60" cy="85" r="20" fill="#ffffff" opacity="0.22" />
+          <circle cx="60" cy="85" r="11" fill="#ffffff" opacity="0.95" />
+          <ellipse class="sage-mouth" cx="60" cy="103" rx="12" ry="2.4" stroke="#eafff5" stroke-width="1.3" opacity="0.75" />
+          </g>
+        </svg>
+      </div>
+      <svg class="sage-legacy-hidden" viewBox="0 0 120 170" fill="none" aria-hidden="true">
+          <path d="M60 16 C45 16 38 26 38 38 C38 46 39 52 41 58 L46 55 L49 60 L54 57 L60 61 L66 57 L71 60 L74 55 L79 58 C81 52 82 46 82 38 C82 26 75 16 60 16 Z" fill="#93a2ad" />
+          <path d="M52.5 131 L51 150 L56.5 150 L57.5 133 Z" fill="#262b33" />
+          <path d="M62.5 133 L63.5 150 L69 150 L67.5 131 Z" fill="#262b33" />
+          <path d="M47.5 146 L58 146 L58 151.5 L47.5 151.5 Z" fill="#f2efe6" />
+          <path d="M62 151.5 L72.5 151.5 L72.5 146 L62 146 Z" fill="#f2efe6" />
+          <path d="M48 151.5 L58 151.5 L59.2 162.5 C59.2 165.3 56.8 166.4 53 166.4 C49.9 166.4 47.9 164.8 47.9 162 Z" fill="url(#sageBoot)" />
+          <path d="M62 151.5 L72 151.5 L72.1 162 C72.1 164.8 70.1 166.4 67 166.4 C63.2 166.4 60.8 165.3 60.8 162.5 Z" fill="url(#sageBoot)" />
+          <path d="M45 63 C52 60.5 68 60.5 75 63 L80 73 C84 90 85.5 110 84 128 L82.5 140 C74 143 46 143 37.5 140 L36 128 C34.5 110 36 90 40 73 Z" fill="url(#sageBody)" />
+          <path d="M60 68 L60 141" stroke="#567a94" stroke-width="1" opacity="0.7" />
+          <path d="M56.5 142 L60 135 L63.5 142 Z" fill="#262b33" opacity="0.9" />
+          <path d="M49 70 C47.5 84 47 98 48 112" stroke="#567a94" stroke-width="1" fill="none" opacity="0.55" />
+          <path d="M71 70 C72.5 84 73 98 72 112" stroke="#567a94" stroke-width="1" fill="none" opacity="0.55" />
+          <path d="M46 66 C41 74 36 86 33 98 L40 102 C43 90 47 80 52 72 Z" fill="url(#sageBody)" />
+          <path d="M74 66 C79 74 84 86 87 98 L80 102 C77 90 73 80 68 72 Z" fill="url(#sageBody)" />
+          <path d="M31 96 L41 93 L43 101 L33 104 Z" fill="#f2efe6" />
+          <path d="M89 96 L79 93 L77 101 L87 104 Z" fill="#f2efe6" />
+          <path d="M32.5 104 L41 101 L39.5 111 C38 113.5 34.5 113.5 33 111 Z" fill="#f7e7d8" />
+          <path d="M87.5 104 L79 101 L80.5 111 C82 113.5 85.5 113.5 87 111 Z" fill="#f7e7d8" />
+          <path d="M56.5 48 L63.5 48 L62.8 57 L57.2 57 Z" fill="#f0ddc9" />
+          <path d="M43.5 63 C43.5 56.5 50.5 53 60 53 C69.5 53 76.5 56.5 76.5 63 C76.5 65.5 75.5 67.5 74 68.5 C72.5 66.5 70.5 66 68.5 67.5 C67 68.7 65 68.7 63.5 67.5 C62.2 66.4 61 66 60 66.3 C59 66 57.8 66.4 56.5 67.5 C55 68.7 53 68.7 51.5 67.5 C49.5 66 47.5 66.5 46 68.5 C44.5 67.5 43.5 65.5 43.5 63 Z" fill="#f5f2ea" />
+          <path d="M46 68.5 C52 71.5 68 71.5 74 68.5 C70 73.5 50 73.5 46 68.5 Z" fill="#ddd6c6" opacity="0.9" />
+          <ellipse cx="60" cy="38" rx="13" ry="14.5" fill="#f7e7d8" />
+          <path d="M47 32 C45.5 40 45.5 48 47.5 55 L52 53.5 C50.5 47 50.3 40 51 34 Z" fill="url(#sageHair)" />
+          <path d="M73 32 C74.5 40 74.5 48 72.5 55 L68 53.5 C69.5 47 69.7 40 69 34 Z" fill="url(#sageHair)" />
+          <path d="M46.5 36 L50 37.5 L52.5 32.5 L55.5 38 L58.5 31.5 L61.5 37.5 L64.5 31.5 L67.5 38 L70 32.5 L72.5 37.5 L74 36 L74 34 C74 23 68.5 17.5 60 17.5 C51.5 17.5 46.5 23 46.5 34 Z" fill="url(#sageHair)" />
+          <g class="sage-eyes">
+            <ellipse cx="54" cy="43" rx="3.4" ry="4.4" fill="#f2c53d" stroke="#8a6d1a" stroke-width="0.7" />
+            <ellipse cx="66" cy="43" rx="3.4" ry="4.4" fill="#f2c53d" stroke="#8a6d1a" stroke-width="0.7" />
+            <ellipse cx="52.9" cy="41.2" rx="1.1" ry="1.4" fill="#ffffff" />
+            <ellipse cx="64.9" cy="41.2" rx="1.1" ry="1.4" fill="#ffffff" />
+            <ellipse cx="55.2" cy="45.2" rx="0.6" ry="0.7" fill="#fff8d8" opacity="0.9" />
+            <ellipse cx="67.2" cy="45.2" rx="0.6" ry="0.7" fill="#fff8d8" opacity="0.9" />
+          </g>
+          <path d="M50.8 39.6 C52.2 38.2 55.8 38.2 57.2 39.6" stroke="#3a3630" stroke-width="1.1" fill="none" stroke-linecap="round" />
+          <path d="M62.8 39.6 C64.2 38.2 67.8 38.2 69.2 39.6" stroke="#3a3630" stroke-width="1.1" fill="none" stroke-linecap="round" />
+          <ellipse cx="60" cy="50.5" rx="1.7" ry="0.8" fill="#c07a62" />
+      </svg>
+    </div>
+
+    <div class="pccmd-overlay hidden" id="pccmdOverlay" role="dialog" aria-modal="true" aria-labelledby="pccmdMessage">
+      <div class="pccmd-box">
+        <p class="pccmd-message" id="pccmdMessage"></p>
+        <div class="pccmd-actions">
+          <button class="pccmd-deny" id="pccmdDeny" type="button">No</button>
+          <button class="pccmd-confirm" id="pccmdConfirm" type="button">Yes, open it</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

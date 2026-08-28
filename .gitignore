@@ -1,0 +1,6 @@
+# Generated podcast episodes (server-persisted .wav files)
+podcasts/
+
+# Freebuff preview logs
+.freebuff/*.log
+.freebuff/*.log.err
