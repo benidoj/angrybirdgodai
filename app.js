@@ -340,6 +340,38 @@
     window.speechSynthesis.onvoiceschanged = populateSpeechVoices;
   }
   scheduleAutoWakeStart();
+  checkForUpdates();
+
+  // --- Auto-update checker ---
+  function checkForUpdates() {
+    const GITHUB_REPO = 'benidoj/angrybirdgodai';
+    const STORAGE_KEY_AB = 'abgodai_last_commit';
+    try {
+      fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits?sha=main&per_page=1`, {
+        headers: { Accept: 'application/vnd.github.v3+json' },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!Array.isArray(data) || !data[0]) return;
+          const latestSha = data[0].sha;
+          const lastSeen = localStorage.getItem(STORAGE_KEY_AB);
+          if (lastSeen && lastSeen !== latestSha) {
+            showUpdateBanner();
+          }
+          localStorage.setItem(STORAGE_KEY_AB, latestSha);
+        })
+        .catch(() => {}); // silent fail — offline or rate-limited
+    } catch (e) { /* ignore */ }
+  }
+
+  function showUpdateBanner() {
+    if (document.getElementById('updateBanner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'updateBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1510;border-bottom:2px solid #ff6b45;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;font-family:system-ui,sans-serif;color:#e8ddd0;';
+    banner.innerHTML = `<span>🐦 <strong>Update verfügbar!</strong> Eine neue Version ist auf GitHub verfügbar.</span><span><a href="https://github.com/benidoj/angrybirdgodai" target="_blank" rel="noopener" style="color:#ff6b45;text-decoration:underline;margin-right:12px;">Herunterladen</a><button onclick="this.parentElement.parentElement.remove()" style="background:none;border:1px solid #555;color:#aaa;padding:4px 10px;border-radius:4px;cursor:pointer;">Schließen</button></span>`;
+    document.body.prepend(banner);
+  }
 
   function loadState() {
     try {

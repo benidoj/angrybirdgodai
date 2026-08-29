@@ -311,6 +311,35 @@ Die portable EXE (`AngryBirdGodAI.exe`, ~71 MB) ist alles was dein Freund brauch
 - Kein Ollama nötig (das muss er separat installieren)
 - Einfach doppelklicken, Ollama-Endpunkt in Settings eintragen, fertig
 
+### App updaten
+
+Wie du auf die neueste Version kommst, hängt davon ab, wie du die App bekommen hast:
+
+**Per `git clone` (Entwickler):**
+
+```powershell
+cd angrybirdgodai
+git pull                          # Code aktualisieren
+npm install                       # falls neue Dependencies dazugekommen sind
+cd desktop && npm install && cd ..  # falls sich desktop/ geändert hat
+npm start                         # App starten
+```
+
+**Per ZIP-Download:**
+
+1. Lade die neueste ZIP von https://github.com/benidoj/angrybirdgodai/archive/refs/heads/main.zip herunter
+2. Entpacke sie
+3. Kopiere deine `Settings`-Konfiguration (Ollama-Endpunkt, Modellname) aus der alten Version
+4. Starte mit `npm start` oder nutze die neue portable EXE
+
+**Per portable EXE (`AngryBirdGodAI.exe`):**
+
+1. Lade die neueste EXE von https://github.com/benidoj/angrybirdgodai/releases herunter (oder direkt von `desktop/dist/AngryBirdGodAI.exe` im Repo)
+2. Ersetze die alte EXE durch die neue
+3. Doppelklick — fertig
+
+> **Tipp:** Die App prüft beim Start automatisch, ob eine neue Version auf GitHub verfügbar ist. Du siehst ein Hinweis-Banner, wenn ein Update bereit ist.
+
 ---
 
 ## Erste Einrichtung
