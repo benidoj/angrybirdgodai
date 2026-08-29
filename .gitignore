@@ -8,3 +8,14 @@ podcasts/
 # Large model files (distribute separately)
 *.onnx
 *.bin
+
+# Electron overlay dependencies
+overlay/node_modules/
+
+# Desktop app builds
+desktop/dist
+desktop/node_modules
+desktop/server.js
+desktop/app.js
+desktop/styles.css
+desktop/index.html

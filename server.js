@@ -2,7 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, spawnSync } = require('child_process');
 const { URL } = require('url');
 
 const ROOT = __dirname;
@@ -28,37 +28,419 @@ const MAX_PAGE_CONTENT_CHARS = 6000;
 const DEEP_CONCURRENCY = 3;
 const ANALYSIS_CONCURRENCY = 6;
 
-const APPS = Object.freeze({
-  spotify: 'start spotify:',
-  vscode: 'code',
-  'visual studio code': 'code',
-  chrome: 'start chrome',
-  'google chrome': 'start chrome',
-  firefox: 'start firefox',
-  edge: 'start microsoft-edge:',
-  'microsoft edge': 'start microsoft-edge:',
-  'file explorer': 'explorer',
-  explorer: 'explorer',
-  notepad: 'notepad',
-  calculator: 'calc',
-  calc: 'calc',
-  'command prompt': 'cmd',
-  cmd: 'cmd',
-  powershell: 'start powershell',
-  'task manager': 'taskmgr',
-  taskmgr: 'taskmgr',
-  settings: 'start ms-settings:',
-  'control panel': 'control',
-  discord: 'start discord:',
-  slack: 'start slack:',
-  telegram: 'start telegram:',
-  whatsapp: 'start whatsapp:',
-  obsidian: 'start obsidian:',
-  terminal: 'wt',
-  wordpad: 'write',
-  paint: 'mspaint',
-  'snipping tool': 'snippingtool',
+const APP_DEFS = Object.freeze({
+  spotify: {
+    label: 'Spotify',
+    tryScheme: 'spotify:',
+    tryPaths: ['%APPDATA%\\Spotify\\Spotify.exe', '%LOCALAPPDATA%\\Spotify\\Spotify.exe'],
+  },
+  vscode: {
+    label: 'VS Code',
+    tryNames: ['code'],
+    tryPaths: ['%LOCALAPPDATA%\\Programs\\Microsoft VS Code\\Code.exe', '%ProgramFiles%\\Microsoft VS Code\\Code.exe'],
+  },
+  'visual studio code': { alias: 'vscode' },
+  chrome: {
+    label: 'Chrome',
+    tryNames: ['chrome'],
+    tryPaths: ['%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe', '%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe', '%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe'],
+  },
+  'google chrome': { alias: 'chrome' },
+  firefox: {
+    label: 'Firefox',
+    tryNames: ['firefox'],
+    tryPaths: ['%ProgramFiles%\\Mozilla Firefox\\firefox.exe', '%ProgramFiles(x86)%\\Mozilla Firefox\\firefox.exe'],
+  },
+  edge: {
+    label: 'Edge',
+    tryScheme: 'microsoft-edge:',
+    tryPaths: ['%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe', '%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe'],
+  },
+  'microsoft edge': { alias: 'edge' },
+  'file explorer': {
+    label: 'File Explorer',
+    tryPaths: ['%SystemRoot%\\explorer.exe'],
+    tryNames: ['explorer'],
+  },
+  explorer: { alias: 'file explorer' },
+  notepad: {
+    label: 'Notepad',
+    tryPaths: ['%SystemRoot%\\System32\\notepad.exe'],
+    tryNames: ['notepad'],
+  },
+  calculator: {
+    label: 'Calculator',
+    tryScheme: 'ms-calculator:',
+    tryPaths: ['%SystemRoot%\\System32\\calc.exe'],
+    tryNames: ['calc'],
+  },
+  calc: { alias: 'calculator' },
+  'command prompt': {
+    label: 'Command Prompt',
+    tryPaths: ['%SystemRoot%\\System32\\cmd.exe'],
+    tryNames: ['cmd'],
+  },
+  cmd: { alias: 'command prompt' },
+  powershell: {
+    label: 'PowerShell',
+    tryPaths: ['%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'],
+    tryNames: ['powershell', 'pwsh'],
+  },
+  'task manager': {
+    label: 'Task Manager',
+    tryPaths: ['%SystemRoot%\\System32\\Taskmgr.exe'],
+    tryNames: ['taskmgr'],
+  },
+  taskmgr: { alias: 'task manager' },
+  settings: { label: 'Settings', tryScheme: 'ms-settings:' },
+  store: { label: 'Microsoft Store', tryScheme: 'ms-windows-store:' },
+  'microsoft store': { alias: 'store' },
+  'control panel': {
+    label: 'Control Panel',
+    tryPaths: ['%SystemRoot%\\System32\\control.exe'],
+    tryNames: ['control'],
+  },
+  discord: {
+    label: 'Discord',
+    tryScheme: 'discord:',
+    tryPaths: ['%LOCALAPPDATA%\\Discord\\app-*\\Discord.exe'],
+  },
+  slack: {
+    label: 'Slack',
+    tryScheme: 'slack:',
+    tryPaths: ['%LOCALAPPDATA%\\slack\\slack.exe'],
+  },
+  telegram: {
+    label: 'Telegram',
+    tryScheme: 'tg:',
+    tryPaths: ['%APPDATA%\\Telegram Desktop\\Telegram.exe', '%LOCALAPPDATA%\\Telegram Desktop\\Telegram.exe'],
+  },
+  whatsapp: {
+    label: 'WhatsApp',
+    tryScheme: 'whatsapp:',
+    tryPaths: ['%LOCALAPPDATA%\\WhatsApp\\WhatsApp.exe'],
+  },
+  obsidian: {
+    label: 'Obsidian',
+    tryScheme: 'obsidian:',
+    tryPaths: ['%LOCALAPPDATA%\\Obsidian\\Obsidian.exe'],
+  },
+  terminal: { label: 'Terminal', tryNames: ['wt'] },
+  wordpad: {
+    label: 'WordPad',
+    tryPaths: ['%SystemRoot%\\System32\\write.exe'],
+    tryNames: ['write'],
+  },
+  paint: {
+    label: 'Paint',
+    tryPaths: ['%SystemRoot%\\System32\\mspaint.exe'],
+    tryNames: ['mspaint'],
+  },
+  'snipping tool': { label: 'Snipping Tool', tryNames: ['SnippingTool'] },
 });
+
+function expandEnv(value) {
+  return String(value).replace(/%([^%]+)%/g, (_, name) => process.env[name] || '');
+}
+
+function pathExists(filePath) {
+  try {
+    return fs.existsSync(filePath);
+  } catch (error) {
+    return false;
+  }
+}
+
+function whereIs(name) {
+  try {
+    const result = spawnSync('where.exe', [name], { encoding: 'utf8', windowsHide: true, timeout: 4000 });
+    if (result.status !== 0) return '';
+    return String(result.stdout || '').split(/\r?\n/)[0].trim();
+  } catch (error) {
+    return '';
+  }
+}
+
+function findGlobPath(pattern) {
+  const separatorIndex = pattern.lastIndexOf('\\');
+  if (separatorIndex < 0) return '';
+  const dir = pattern.slice(0, separatorIndex);
+  const filePattern = pattern.slice(separatorIndex + 1).toLowerCase();
+  let entries;
+  try {
+    entries = fs.readdirSync(dir);
+  } catch (error) {
+    return '';
+  }
+  const base = filePattern.replace(/[.*]/g, '');
+  const match = entries.find((entry) => {
+    const lower = entry.toLowerCase();
+    return filePattern.includes('*') ? lower.startsWith(base) : lower === filePattern;
+  });
+  return match ? path.join(dir, match) : '';
+}
+
+function schemeRegistered(scheme) {
+  const clean = String(scheme).replace(/[^a-zA-Z0-9+.-]/g, '');
+  if (!clean) return false;
+  const check = (root) => {
+    try {
+      return spawnSync('reg', ['query', `${root}\\Software\\Classes\\${clean}`], { encoding: 'utf8', windowsHide: true, timeout: 4000 }).status === 0;
+    } catch (error) {
+      return false;
+    }
+  };
+  return check('HKCU') || check('HKLM');
+}
+
+// ---- Generic app discovery (full access) ----
+// When the AI requests an app that is not in the built-in whitelist, we try to
+// find it on the machine: Start Menu shortcuts (.lnk), the registry "App Paths"
+// keys, and the PATH. The user is always asked to confirm before anything runs.
+
+function startMenuRoots() {
+  return [
+    `${process.env.APPDATA || ''}\\Microsoft\\Windows\\Start Menu\\Programs`,
+    `${process.env.ProgramData || ''}\\Microsoft\\Windows\\Start Menu\\Programs`,
+  ].filter(Boolean);
+}
+
+function walkStartMenu(root, depth = 0) {
+  if (depth > 4) return [];
+  let entries;
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch (error) {
+    return [];
+  }
+  const links = [];
+  for (const entry of entries) {
+    const full = path.join(root, entry.name);
+    const isDir = entry.isDirectory() || entry.isSymbolicLink();
+    if (isDir) {
+      links.push(...walkStartMenu(full, depth + 1));
+    } else if (entry.isFile() && /^\.lnk$/i.test(path.extname(entry.name))) {
+      links.push(full);
+    }
+  }
+  return links;
+}
+
+// Resolves the target of a Windows .lnk shortcut using WScript.Shell (reliable
+// on Windows; the binary .lnk format is not worth parsing by hand).
+function resolveLnkTarget(linkPath) {
+  try {
+    const escaped = String(linkPath).replace(/'/g, "''");
+    const script = `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${escaped}'); $s.TargetPath`;
+    const result = spawnSync('powershell', ['-NoProfile', '-Command', script], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 6000,
+    });
+    if (result.status !== 0) return '';
+    const target = String(result.stdout || '').trim();
+    if (target && /^[a-z]:\\.*/i.test(target) && pathExists(target)) return target;
+  } catch (error) {
+    return '';
+  }
+  return '';
+}
+
+// True if the shortcut's target exists (even if it is not a plain .exe path).
+function linkTargetExists(linkPath) {
+  try {
+    const escaped = String(linkPath).replace(/'/g, "''");
+    const script = `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${escaped}'); $s.TargetPath`;
+    const result = spawnSync('powershell', ['-NoProfile', '-Command', script], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 6000,
+    });
+    if (result.status !== 0) return true; // cannot verify — assume it works
+    const target = String(result.stdout || '').trim();
+    if (!target) return true; // e.g. UWP app shortcuts — let Windows resolve them
+    return pathExists(target);
+  } catch (error) {
+    return true;
+  }
+}
+
+function findStartMenuLink(target) {
+  const normalized = String(target).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  const tokens = normalized.split(' ').filter((token) => token.length > 1);
+  for (const root of startMenuRoots()) {
+    for (const link of walkStartMenu(root)) {
+      const name = path.basename(link, '.lnk').toLowerCase();
+      // Exact name match, or all significant tokens appear in the shortcut name.
+      const linkNormalized = name.replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (name === normalized || (tokens.length && tokens.every((token) => linkNormalized.includes(token)))) {
+        // Prefer the resolved .exe target if it exists; otherwise fall back to the
+        // shortcut itself (some apps only register a .lnk).
+        const resolvedExe = resolveLnkTarget(link);
+        if (resolvedExe) return resolvedExe;
+        // Skip dead shortcuts (target no longer exists) — starting them hangs.
+        if (!linkTargetExists(link)) continue;
+        return link;
+      }
+    }
+  }
+  return '';
+}
+
+function findRegistryAppPath(target) {
+  const candidates = [
+    `${target}.exe`,
+    target,
+    `${target} (x86).exe`,
+  ];
+  for (const candidate of candidates) {
+    const result = spawnSync('reg', ['query', `HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${candidate}`, '/ve'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 4000,
+    });
+    if (result.status !== 0) continue;
+    const match = /REG_SZ\s+([^\r\n]+)/i.exec(String(result.stdout || ''));
+    if (match) {
+      const exePath = expandEnv(match[1].trim());
+      if (pathExists(exePath)) return exePath;
+    }
+  }
+  return '';
+}
+
+// Well-known websites the AI can open in the default browser.
+const WEBSITES = Object.freeze({
+  youtube: 'https://www.youtube.com',
+  google: 'https://www.google.com',
+  github: 'https://github.com',
+  reddit: 'https://www.reddit.com',
+  twitter: 'https://twitter.com',
+  x: 'https://twitter.com',
+  wikipedia: 'https://www.wikipedia.org',
+  twitch: 'https://www.twitch.tv',
+  amazon: 'https://www.amazon.com',
+  netflix: 'https://www.netflix.com',
+  roblox: 'https://www.roblox.com',
+  gmail: 'https://mail.google.com',
+  maps: 'https://maps.google.com',
+  'google maps': 'https://maps.google.com',
+});
+
+const DOMAIN_RE = /^(?:[a-z0-9-]+\.)*[a-z0-9-]+\.(?:com|org|net|io|dev|gg|tv|ai|co|us|uk|de)$/i;
+
+// Opens a website in the default browser: known site names ("youtube") or any
+// domain-like target ("example.com", "www.example.com").
+function resolveWebsite(target) {
+  const clean = String(target).trim().toLowerCase();
+  const known = WEBSITES[clean];
+  if (known) {
+    const label = clean.charAt(0).toUpperCase() + clean.slice(1);
+    return { command: `start "" "${known}"`, label, foundVia: 'website' };
+  }
+  if (DOMAIN_RE.test(clean)) {
+    const url = clean.startsWith('www.') ? `https://${clean}` : `https://www.${clean}`;
+    return { command: `start "" "${url}"`, label: clean, foundVia: 'website' };
+  }
+  return null;
+}
+
+// UWP / Microsoft Store apps have no Start Menu .lnk — Windows exposes them
+// through Get-StartApps. Launch via shell:AppsFolder using the returned AppID
+// (only AUMID-form ids containing "!" are accepted; .lnk entries are handled
+// by findStartMenuLink earlier).
+function findUwpApp(target) {
+  const normalized = String(target).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  const tokens = normalized.split(' ').filter((token) => token.length > 1);
+  let result;
+  try {
+    result = spawnSync('powershell', ['-NoProfile', '-Command', 'Get-StartApps | ForEach-Object { "$($_.Name)|$($_.AppID)" }'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 6000,
+    });
+  } catch (error) {
+    return '';
+  }
+  if (result.status !== 0) return '';
+  for (const line of String(result.stdout || '').split(/\r?\n/)) {
+    const parts = line.split('|');
+    if (parts.length < 2) continue;
+    const appId = parts.pop().trim();
+    const name = parts.join('|').trim();
+    if (!appId.includes('!')) continue; // desktop .lnk entries — handled elsewhere
+    const nameNormalized = name.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const matched = name === normalized || (tokens.length && tokens.every((token) => nameNormalized.includes(token)));
+    if (!matched) continue;
+    const cleanId = appId.replace(/[^a-zA-Z0-9!._-]/g, '');
+    if (cleanId === appId) return cleanId;
+  }
+  return '';
+}
+
+function resolveGenericApp(target) {
+  const label = String(target)
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+
+  // 1. Start Menu shortcut
+  const link = findStartMenuLink(target);
+  if (link) return { command: `start "" "${link}"`, label, foundVia: 'Start Menu' };
+
+  // 2. UWP / Microsoft Store app (no .lnk on disk)
+  const uwpId = findUwpApp(target);
+  if (uwpId) return { command: `start "" "shell:AppsFolder\\${uwpId}"`, label, foundVia: 'Store app' };
+
+  // 3. Registry App Paths
+  const regExe = findRegistryAppPath(target);
+  if (regExe) return { command: `start "" "${regExe}"`, label, foundVia: 'registry' };
+
+  // 4. Executable on PATH
+  const pathExe = whereIs(`${target}.exe`) || whereIs(target);
+  if (pathExe) return { command: `start "" "${pathExe}"`, label, foundVia: 'PATH' };
+
+  // 5. Website (known sites or domain-like names) — opens in the browser
+  const website = resolveWebsite(target);
+  if (website) return website;
+
+  return { error: `Could not find "${target}" on this PC.` };
+}
+
+function resolveAppLaunch(target) {
+  let def = APP_DEFS[target];
+  if (!def) return resolveGenericApp(target);
+  if (def.alias) def = APP_DEFS[def.alias];
+  if (!def) return resolveGenericApp(target);
+
+  // 1. Known install paths (most reliable, avoids PATH pollution like Git Bash shims)
+  if (Array.isArray(def.tryPaths)) {
+    for (const raw of def.tryPaths) {
+      const expanded = expandEnv(raw);
+      const candidate = expanded.includes('*') ? findGlobPath(expanded) : (pathExists(expanded) ? expanded : '');
+      if (candidate) return { command: `start "" "${candidate}"`, label: def.label };
+    }
+  }
+
+  // 2. Executable found via PATH
+  if (Array.isArray(def.tryNames)) {
+    for (const name of def.tryNames) {
+      const found = whereIs(name);
+      if (found) return { command: `start "" "${found}"`, label: def.label };
+    }
+  }
+
+  // 3. URI scheme registered by the app
+  if (def.tryScheme && schemeRegistered(def.tryScheme)) {
+    return { command: `start "" ${def.tryScheme}`, label: def.label };
+  }
+
+  // 4. Generic discovery as a last resort (in case the app moved or is aliased)
+  return resolveGenericApp(target);
+}
 
 const FOLDERS = Object.freeze({
   downloads: 'start "" "%USERPROFILE%\\Downloads"',
@@ -1083,19 +1465,38 @@ async function handleExec(req, res) {
         return;
       }
 
-      const appCommand = APPS[target];
       const folderCommand = FOLDERS[target];
-      const command = appCommand || folderCommand;
-      if (!command) {
-        const allTargets = [...Object.keys(APPS), ...Object.keys(FOLDERS)].sort().join(', ');
-        sendJson(res, 400, { ok: false, error: `Unknown target "${target}". Available: ${allTargets}.` });
+      if (!folderCommand) {
+        const resolved = resolveAppLaunch(target);
+        if (resolved.error) {
+          sendJson(res, 400, { ok: false, error: resolved.error });
+          return;
+        }
+        const result = await new Promise((resolve) => {
+          exec(resolved.command, { timeout: 8000, windowsHide: false }, (error, stdout, stderr) => {
+            if (error && error.killed) {
+              resolve({ ok: false, error: 'The command timed out.' });
+            } else if (error) {
+              resolve({ ok: false, error: error.message || 'The command could not be started.' });
+            } else if (stderr && stderr.trim()) {
+              resolve({ ok: false, error: stderr.trim() });
+            } else {
+              resolve({ ok: true, message: `${resolved.label || target} opened.` });
+            }
+          });
+        });
+        if (result.ok) {
+          sendJson(res, 200, result);
+        } else {
+          sendJson(res, 502, result);
+        }
         return;
       }
 
       const displayName = target.charAt(0).toUpperCase() + target.slice(1);
 
       const result = await new Promise((resolve) => {
-        exec(command, { timeout: 8000, windowsHide: false }, (error, stdout, stderr) => {
+        exec(folderCommand, { timeout: 8000, windowsHide: false }, (error, stdout, stderr) => {
           if (error && error.killed) {
             resolve({ ok: false, error: 'The command timed out.' });
           } else if (error) {
@@ -1144,8 +1545,44 @@ function serveStatic(res, requestUrl) {
   });
 }
 
+// Bridge between the main browser app and the Electron desktop overlay.
+// The browser posts its Great Sage avatar state; the overlay polls it and
+// posts a stop request when the user clicks the overlay.
+let overlayState = { visible: false, mode: 'idle', bubble: '', stopRequested: false };
+
+async function handleOverlayState(req, res) {
+  if (req.method === 'GET') {
+    sendJson(res, 200, overlayState);
+    return;
+  }
+  if (req.method !== 'POST') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+  try {
+    const payload = await readJsonBody(req, 16 * 1024);
+    if (payload.stopRequested === true) {
+      overlayState.stopRequested = true;
+    } else if (payload.stopRequested === false) {
+      overlayState.stopRequested = false;
+    } else {
+      overlayState.visible = Boolean(payload.visible);
+      overlayState.mode = ['idle', 'thinking', 'speaking'].includes(payload.mode) ? payload.mode : 'idle';
+      overlayState.bubble = String(payload.bubble || '').slice(0, 400);
+    }
+    sendJson(res, 200, overlayState);
+  } catch (error) {
+    sendJson(res, 400, { error: String((error && error.message) || error) });
+  }
+}
+
 const server = http.createServer((req, res) => {
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || `${HOST}:${PORT}`}`);
+
+  if (requestUrl.pathname === '/api/overlay-state') {
+    handleOverlayState(req, res);
+    return;
+  }
 
   if (requestUrl.pathname === '/api/research') {
     if (req.method !== 'POST') {
@@ -1205,7 +1642,7 @@ const server = http.createServer((req, res) => {
   serveStatic(res, requestUrl);
 });
 
-if (require.main === module) {
+if (require.main === module || process.env.ELECTRON_RUN_AS_NODE) {
   server.listen(PORT, HOST, () => {
     console.log(`AngryBirdGodAI is running at http://${HOST}:${PORT}`);
     console.log(`Ollama proxy: http://${OLLAMA_HOST}:${OLLAMA_PORT}`);

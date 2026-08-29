@@ -5,6 +5,10 @@
   "description": "A private local ChatGPT-style interface for Ollama and LFM2.5.",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "overlay": "cd overlay && npm start",
+    "desktop": "cd desktop && npm start",
+    "build:desktop": "cd desktop && npm run dist",
+    "build:portable": "cd desktop && npm run dist:portable"
   }
 }

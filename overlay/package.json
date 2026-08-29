@@ -1,0 +1,13 @@
+{
+  "name": "angrybirdgodai-overlay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Desktop overlay showing the Great Sage above other apps while she talks.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

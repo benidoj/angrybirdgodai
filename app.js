@@ -39,16 +39,16 @@
   const REGENERATE_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M20 5v6h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const WAVE_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10v4M8 6.5v11M12 4v16M16 6.5v11M20 10v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
   const WAKE_PATTERN = /(?:^|\bhey\s+|\bok(?:ay)?[\s,]*)\s*great[\s-]*(?:sage|change|stage|page|save|cage|rage|safe)\b/i;
-  const WAKE_SILENCE_MS = 2600;
+  const WAKE_SILENCE_MS = 4000;
   const NOTE_REQUEST_PATTERN = new RegExp(
     '\\b(?:make|take|write|create|add|save|jot|draft|record)\\b[\\w\\s,]{0,40}?\\b(?:note|notes)\\b'
-    + '|\\b(?:notier(?:e)?|schreib(?:e)?)\\b[\\w\\s,]{0,40}?\\b(?:notiz|notizen)\\b'
+    + '|\\b(?:notier(?:e)?|schreib(?:e)?|mach(?:e)?|erstell(?:e)?|speicher(?:e)?|leg(?:e)?)\\b[\\w\\s,]{0,40}?\\b(?:notiz|notizen)\\b'
     + '|\\b(?:note|notes|notiz|notizen)\\s+(?:this\\s+|that\\s+)?(?:down|auf)\\b'
-    + '|\\b(?:write|schreib(?:e)?)\\s+(?:this|das|es)\\s+(?:down|auf)\\b'
+    + '|\\b(?:write|schreib(?:e)?|mach(?:e)?|erstell(?:e)?|leg(?:e)?)\\s+(?:this|das|es|eine|einen)\\s+(?:down|auf|an)\\b'
     + '|\\bjot\\s+(?:it\\s+|that\\s+)?down\\b'
-    + '|\\bnotiz(?:en)?\\b'
     + '|\\bnotier(?:e)?\\b'
-    + '|\\bmerk(?:e)?\\s+(?:dir\\s+)?das\\b',
+    + '|\\bmerk(?:e)?\\s+(?:dir\\s+)?das\\b'
+    + '|\\b(?:schreib|mach|erstell|leg|speicher)(?:e)?\\s+mir\\s+(?:eine\\s+)?notiz\\b',
     'i'
   );
   const CONTEXT_LENGTHS = [4096, 8192, 16384, 32768, 65536, 131072];
@@ -85,6 +85,8 @@
     taskmgr: 'Task Manager',
     settings: 'Settings',
     'control panel': 'Control Panel',
+    store: 'Microsoft Store',
+    'microsoft store': 'Microsoft Store',
     discord: 'Discord',
     slack: 'Slack',
     telegram: 'Telegram',
@@ -277,6 +279,7 @@
     fishApiKey: 'sk-fish-FNkgQxhapxepQbrALNm3OkOFsWwVl5kuPhObC5_aQx0',
     fishReferenceId: '4c82a14548dc4b3e8d7dda68c9756c90',
     autoWake: false,
+    sageAvatarPos: null,
     conversations: [],
     activeConversationId: null,
     connected: false,
@@ -366,6 +369,9 @@
       if (typeof saved.fishApiKey === 'string' && saved.fishApiKey) state.fishApiKey = saved.fishApiKey;
       if (typeof saved.fishReferenceId === 'string' && saved.fishReferenceId) state.fishReferenceId = saved.fishReferenceId;
       if (typeof saved.autoWake === 'boolean') state.autoWake = saved.autoWake;
+      if (saved.sageAvatarPos && Number.isFinite(Number(saved.sageAvatarPos.left)) && Number.isFinite(Number(saved.sageAvatarPos.top))) {
+        state.sageAvatarPos = { left: Number(saved.sageAvatarPos.left), top: Number(saved.sageAvatarPos.top) };
+      }
       if (Array.isArray(saved.conversations)) {
         state.conversations = saved.conversations
           .filter((conversation) => conversation && typeof conversation === 'object' && Array.isArray(conversation.messages))
@@ -424,6 +430,7 @@
         fishApiKey: state.fishApiKey,
         fishReferenceId: state.fishReferenceId,
         autoWake: state.autoWake,
+        sageAvatarPos: state.sageAvatarPos,
         activeConversationId: state.activeConversationId,
         conversations: state.conversations.map((conversation) => ({
           ...conversation,
@@ -628,10 +635,61 @@
           avatar.style.setProperty('--sage-tilt-x', `${(ny * -12).toFixed(2)}deg`);
         });
       });
+      // Drag & drop: grab her and move her anywhere on the screen.
+      elements.greatSageAvatar.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        const rect = elements.greatSageAvatar.getBoundingClientRect();
+        sageDrag = { pointerX: event.clientX, pointerY: event.clientY, left: rect.left, top: rect.top, moved: false };
+        try { elements.greatSageAvatar.setPointerCapture(event.pointerId); } catch (error) { /* synthetic/unsupported pointer — drag still works */ }
+      });
+      elements.greatSageAvatar.addEventListener('pointermove', (event) => {
+        if (!sageDrag) return;
+        const dx = event.clientX - sageDrag.pointerX;
+        const dy = event.clientY - sageDrag.pointerY;
+        if (Math.abs(dx) + Math.abs(dy) > 6) sageDrag.moved = true;
+        if (!sageDrag.moved) return;
+        const rect = elements.greatSageAvatar.getBoundingClientRect();
+        const x = clamp(sageDrag.left + dx, -rect.width + 40, window.innerWidth - 40);
+        const y = clamp(sageDrag.top + dy, 0, window.innerHeight - 40);
+        elements.greatSageAvatar.style.left = `${x}px`;
+        elements.greatSageAvatar.style.top = `${y}px`;
+        elements.greatSageAvatar.style.right = 'auto';
+        elements.greatSageAvatar.style.bottom = 'auto';
+      });
+      const endSageDrag = (event) => {
+        if (!sageDrag) return;
+        if (sageDrag.moved) {
+          sageDragJustMoved = true;
+          state.sageAvatarPos = { left: parseFloat(elements.greatSageAvatar.style.left), top: parseFloat(elements.greatSageAvatar.style.top) };
+          saveState();
+          pushOverlayState();
+        }
+        sageDrag = null;
+      };
+      elements.greatSageAvatar.addEventListener('pointerup', endSageDrag);
+      elements.greatSageAvatar.addEventListener('pointercancel', () => { sageDrag = null; });
     }
     elements.kokoroEndpointInput.addEventListener('change', () => { state.kokoroEndpoint = elements.kokoroEndpointInput.value.trim() || 'http://localhost:8880'; });
     elements.greatSagePresetBtn.addEventListener('click', () => applyGreatSagePreset());
     elements.speechPresetResetBtn.addEventListener('click', () => applySpeechPresetReset());
+
+    // If the user clicked the desktop overlay (stop), stop the current speech.
+    window.setInterval(() => {
+      fetch('/api/overlay-state')
+        .then((resp) => resp.json().catch(() => null))
+        .then((state) => {
+          if (state && state.stopRequested) {
+            fetch('/api/overlay-state', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ stopRequested: false }),
+            }).catch(() => {});
+            stopSpeech();
+          }
+        })
+        .catch(() => {});
+    }, 700);
+    window.setTimeout(pushOverlayState, 500);
     elements.deepToggle.addEventListener('click', toggleDeepOverride);
     elements.podcastButton.addEventListener('click', () => setView('podcast'));
     elements.podcastGenerateButton.addEventListener('click', generatePodcast);
@@ -1575,7 +1633,15 @@
   function saveTextAsNote(text) {
     const clean = String(text || '').trim();
     if (!clean) return;
-    const firstLine = clean.split(/\n+/)[0].replace(/[#*_`>~-]/g, '').replace(/\s+/g, ' ').trim();
+    // Skip leading markdown code-fence lines (```markdown / ```) when picking the title.
+    const titleLine = clean.split(/\n+/).find((line) => !/^```[\w-]*\s*$/i.test(line.trim())) || '';
+    const firstLine = titleLine
+      .replace(/^```[\w-]*\s*/i, '')
+      .replace(/```$/i, '')
+      .replace(/^#+\s*/, '')
+      .replace(/[#*_`>~-]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
     const note = {
       id: makeId(),
       title: firstLine.slice(0, 80) || 'Note from AngryBirdGodAI',
@@ -1585,6 +1651,8 @@
     };
     notesState.notes.unshift(note);
     saveNotes();
+    // Refresh the notes workspace immediately so the new note is visible right away.
+    if (currentView === 'notes') renderNotes();
     showToast(`Saved to notes${note.title ? `: “${note.title}”` : ''}.`);
   }
 
@@ -2003,6 +2071,10 @@
             blocks.push({ action: 'open', target: 'folder', path: parsed.path.trim() });
           } else if (target && (PC_APPS[target] || PC_FOLDERS[target])) {
             blocks.push({ action: 'open', target });
+          } else if (target && /^[a-z0-9][a-z0-9 .+_-]{0,63}$/i.test(target)) {
+            // Full access: any plausible app name is accepted. The server finds it
+            // (Start Menu, registry, PATH) and the user confirms before it runs.
+            blocks.push({ action: 'open', target });
           }
         } else if (parsed.action === 'system' && target && SYSTEM_ACTIONS[target]) {
           blocks.push({ action: 'system', target });
@@ -2247,7 +2319,6 @@
 
       if (assistantMessage.noteRequested && !assistantMessage.error && !assistantMessage.cancelled && assistantMessage.content.trim()) {
         saveTextAsNote(stripImagePlaceholders(assistantMessage.content));
-        saveTextAsNote(assistantMessage.content);
       }
       hideGreatSageAvatar();
       if (shouldAutoRead) speakMessage(assistantMessage);
@@ -2391,7 +2462,7 @@
     }
     systemMessages.push({
       role: 'system',
-      content: 'You can ask the application to open programs on the user\'s Windows PC or run safe read-only system checks. To request an action, output exactly this on its own line:\n\n```tool\n{"action":"open","target":"spotify"}\n```\n\nOpen targets: spotify, vscode, chrome, firefox, edge, file explorer, notepad, calculator, command prompt, powershell, task manager, settings, control panel, discord, slack, telegram, whatsapp, obsidian, terminal, wordpad, paint, snipping tool.\n\nFolder targets: downloads, documents, desktop, music, pictures, videos, home, user folder, onedrive, appdata, program files, temp. For a specific folder path, use target \"folder\" with a path field: ```tool\n{"action":"open","target":"folder","path":"C:\\Users\\andre\\Projects"}\n```\n\nSystem check targets: cpu, memory, disk, processes, network, uptime. For example: ```tool\n{"action":"system","target":"cpu"}\n```\n\nWhen the user asks about their PC (performance, disk space, CPU, memory, running programs, network, uptime), always run the relevant system check before answering — the real data is more useful than guessing. Even if the user hasn\'t explicitly asked for a check, be proactive: if a reply would benefit from knowing the PC\'s actual state (e.g. "can my system handle this?", "why is my PC slow?", "do I have enough space?"), offer to run the check first and explain what you\'ll look at. The tool output will be injected into the conversation and you can discuss the results naturally. Never claim to know PC state without checking — either run a check or explain that you\'d need one.\n\nThe user will be asked to confirm before any action is taken. Place the tool block after your reply text.',
+      content: 'You can ask the application to open programs on the user\'s Windows PC or run safe read-only system checks. To request an action, output exactly this on its own line:\n\n```tool\n{"action":"open","target":"spotify"}\n```\n\nYou have FULL access to any app installed on the PC: you are not limited to a whitelist. When the user names an app, use its name as the target (lowercase, spaces allowed), e.g. {"action":"open","target":"steam"}, {"action":"open","target":"vlc"}, {"action":"open","target":"blender"}, {"action":"open","target":"audacity"}, {"action":"open","target":"obs studio"}, {"action":"open","target":"discord"}. Known common targets: spotify, vscode, chrome, firefox, edge, file explorer, notepad, calculator, command prompt, powershell, task manager, settings, control panel, microsoft store, discord, slack, telegram, whatsapp, obsidian, terminal, wordpad, paint, snipping tool. Microsoft Store / UWP apps without a classic shortcut are also supported — just use the app name (e.g. {"action":"open","target":"calculator"}, {"action":"open","target":"store"}).\n\nWebsites: you can also open websites in the user\'s default browser — either a known site name (youtube, google, github, reddit, wikipedia, twitch, netflix, roblox, gmail, maps) or any domain like "example.com". E.g. {"action":"open","target":"youtube"} or {"action":"open","target":"docs.python.org"}.\n\nFolder targets: downloads, documents, desktop, music, pictures, videos, home, user folder, onedrive, appdata, program files, temp. For a specific folder path, use target \"folder\" with a path field: ```tool\n{"action":"open","target":"folder","path":"C:\\Users\\andre\\Projects"}\n```\n\nSystem check targets: cpu, memory, disk, processes, network, uptime. For example: ```tool\n{"action":"system","target":"cpu"}\n```\n\nWhen the user asks about their PC (performance, disk space, CPU, memory, running programs, network, uptime), always run the relevant system check before answering — the real data is more useful than guessing. Even if the user hasn\'t explicitly asked for a check, be proactive: if a reply would benefit from knowing the PC\'s actual state (e.g. "can my system handle this?", "why is my PC slow?", "do I have enough space?"), offer to run the check first and explain what you\'ll look at. The tool output will be injected into the conversation and you can discuss the results naturally. Never claim to know PC state without checking — either run a check or explain that you\'d need one.\n\nThe user will be asked to confirm before any action is taken. Place the tool block after your reply text.',
     });
     if (researchMessage) systemMessages.push(researchMessage);
     const sourceMessages = conversation.messages
@@ -3012,6 +3083,7 @@
     if (/^[a-z\s-]+$/.test(text) && !text.includes(' ')) {
       if (PC_APPS[text]) return { type: 'app', target: text };
       if (PC_FOLDERS[text]) return { type: 'app', target: text };
+      if (/^[a-z0-9][a-z0-9 .+_-]{0,63}$/i.test(text)) return { type: 'app', target: text };
       return null;
     }
 
@@ -3036,6 +3108,8 @@
         return { type: 'app', target: key };
       }
     }
+    // Full access: any plausible app name goes to the generic finder.
+    if (/^[a-z0-9][a-z0-9 .+_-]{0,63}$/i.test(rawTarget)) return { type: 'app', target: rawTarget };
     return null;
   }
 
@@ -3058,6 +3132,40 @@
 
   let kokoroAudio = null;  // currently playing HTMLAudioElement for Kokoro or Fish
 
+  // Drag & drop state for the in-browser avatar.
+  let sageDrag = null;
+  let sageDragJustMoved = false;
+
+  // Restores the avatar to the position the user dragged it to (persisted in state).
+  function applySageAvatarPosition() {
+    const el = elements.greatSageAvatar;
+    if (!el) return;
+    if (state.sageAvatarPos && Number.isFinite(state.sageAvatarPos.left) && Number.isFinite(state.sageAvatarPos.top)) {
+      el.style.left = `${state.sageAvatarPos.left}px`;
+      el.style.top = `${state.sageAvatarPos.top}px`;
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+    }
+  }
+
+  // Desktop overlay bridge: mirrors the avatar state to /api/overlay-state so the
+  // Electron overlay (npm run overlay) can show the Great Sage above other apps.
+  function pushOverlayState() {
+    const el = elements.greatSageAvatar;
+    if (!el) return;
+    const visible = !el.classList.contains('great-sage-off') && isGreatSageVoiceSelected();
+    const bubble = elements.greatSageBubble?.textContent || '';
+    fetch('/api/overlay-state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        visible,
+        mode: el.classList.contains('thinking') ? 'thinking' : (el.classList.contains('speaking') ? 'speaking' : 'idle'),
+        bubble,
+      }),
+    }).catch(() => {});
+  }
+
   // Great Sage avatar: visible only while the selected voice is the Great Sage
   // (Fish Audio Great Sage model, or the Kokoro 'great_sage' blend) AND she is talking.
   function isGreatSageVoiceSelected() {
@@ -3072,9 +3180,11 @@
   function showGreatSageAvatar(mode = 'speaking') {
     const el = elements.greatSageAvatar;
     if (!el || !isGreatSageVoiceSelected()) return;
+    applySageAvatarPosition();
     el.classList.remove('great-sage-off');
     el.classList.toggle('speaking', mode === 'speaking');
     el.classList.toggle('thinking', mode === 'thinking');
+    pushOverlayState();
   }
 
   function hideGreatSageAvatar() {
@@ -3084,6 +3194,7 @@
     el.classList.remove('speaking');
     el.classList.remove('thinking');
     clearSageBubble();
+    pushOverlayState();
   }
 
   // Lip-sync: routes the speech audio through a Web Audio AnalyserNode and drives
@@ -3189,11 +3300,12 @@
       if (index === 0) {
         bubble.textContent = sentence;
         bubble.classList.add('visible');
+        pushOverlayState();
         return;
       }
       elapsed += (sentences[index - 1].length / totalChars) * (seconds / rate) * 1000;
       const delay = Math.round(elapsed);
-      sageBubbleTimers.push(window.setTimeout(() => { bubble.textContent = sentence; }, delay));
+      sageBubbleTimers.push(window.setTimeout(() => { bubble.textContent = sentence; pushOverlayState(); }, delay));
     });
   }
 
@@ -3207,6 +3319,11 @@
   }
 
   function toggleSageAvatarReadAloud() {
+    // A real drag fires a click afterwards — swallow it so she is not toggled.
+    if (sageDragJustMoved) {
+      sageDragJustMoved = false;
+      return;
+    }
     const message = getLastAssistantMessage();
     if (!message || !String(message.content || '').trim()) {
       showToast('There is no reply for the Great Sage to read yet.');

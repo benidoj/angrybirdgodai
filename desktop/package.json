@@ -1,0 +1,71 @@
+{
+  "name": "angrybirdgodai-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AngryBirdGodAI — private local AI desktop app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "sync": "cp ../server.js ../app.js ../styles.css ../index.html .",
+    "dist": "npm run sync && electron-builder --win",
+    "dist:portable": "npm run sync && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.angrybirdgodai.desktop",
+    "productName": "AngryBirdGodAI",
+    "directories": {
+      "output": "dist"
+    },
+    "extraResources": [
+      {
+        "from": "server.js",
+        "to": "app/server.js"
+      },
+      {
+        "from": "app.js",
+        "to": "app/app.js"
+      },
+      {
+        "from": "styles.css",
+        "to": "app/styles.css"
+      },
+      {
+        "from": "index.html",
+        "to": "app/index.html"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "app/icon.png"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AngryBirdGodAI",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "AngryBirdGodAI.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

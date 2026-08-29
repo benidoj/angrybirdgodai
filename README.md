@@ -266,6 +266,53 @@ Get-NetTCPConnection -LocalPort 4173 -ErrorAction SilentlyContinue
 
 ---
 
+## Desktop-App (wie Steam)
+
+AngryBirdGodAI kann als echtes Desktop-Programm gestartet werden — mit Startmenü-Verknüpfung, Desktop-Icon und eigenem Fenster, ganz ohne Browser. Die App startet den Server automatisch im Hintergrund.
+
+### Option 1: Portables EXE (kein Installieren)
+
+```text
+desktop/dist/AngryBirdGodAI.exe
+```
+
+Einfach doppelklicken. Die App startet, der Server läuft automatisch, das Fenster öffnet sich. Kein Installieren nötig — perfekt zum Austesten oder Umkopieren auf USB-Stick.
+
+### Option 2: Installer mit Startmenü-Verknüpfung
+
+```text
+desktop/dist/AngryBirdGodAI Setup 1.0.0.exe
+```
+
+Dieser Installer erstellt:
+- Eine **Desktop-Verknüpfung**
+- Einen **Startmenü-Eintrag** unter *AngryBirdGodAI*
+- Einen **Deinstallierer** unter Systemeinstellungen
+
+### Selbst bauen
+
+Wenn du die App selbst neu bauen möchtest (z.B. nach Code-Änderungen):
+
+```powershell
+cd desktop
+npm install          # einmalig (~150 MB)
+npm run dist         # baut Installer + Portable
+# oder:
+npm run dist:portable  # nur portable EXE
+```
+
+Die fertige EXE liegt dann unter `desktop/dist/`.
+
+### Für Freunde teilen
+
+Die portable EXE (`AngryBirdGodAI.exe`, ~71 MB) ist alles was dein Freund braucht:
+- Kein Node.js nötig
+- Kein npm nötig
+- Kein Ollama nötig (das muss er separat installieren)
+- Einfach doppelklicken, Ollama-Endpunkt in Settings eintragen, fertig
+
+---
+
 ## Erste Einrichtung
 
 1. Starte Ollama.
@@ -508,6 +555,54 @@ Du kannst in den Settings **Auto-start “Great Sage” listening** aktivieren. 
 
 ---
 
+## Great-Sage-Overlay über anderen Apps
+
+Die Great Sage kann als schwebendes, transparentes Fenster **über allen anderen Apps** erscheinen (Spotify, Discord, Browser, Spiele …), nicht nur im Browser-Tab. Dafür gibt es eine kleine Electron-Overlay-App im Ordner `overlay/`.
+
+### Einmalige Installation
+
+```powershell
+cd "C:\Users\andre\OneDrive\sillys\angrybirdgodai\overlay"
+npm install
+```
+
+Das lädt Electron einmalig herunter (~150 MB).
+
+### Starten
+
+1. Starte zuerst die normale App: `npm start` (in einem eigenen Fenster).
+2. Starte das Overlay in einem zweiten Fenster:
+
+   ```powershell
+   cd "C:\Users\andre\OneDrive\sillys\angrybirdgodai"
+   npm run overlay
+   ```
+
+3. Der Server und die App müssen laufen, damit das Overlay funktioniert.
+
+### Verhalten
+
+- Das Overlay zeigt das Great-Sage-Sigil **unten rechts über allen Apps**, aber nur solange die Great-Sage-Stimme ausgewählt ist und sie tatsächlich spricht oder denkt.
+- Es ist ein transparentes, rahmenloses, immer-im-Vordergrund-Fenster. Wenn sie nicht spricht, ist es unsichtbar und **klickdurchlässig** — es stört andere Apps nicht.
+- Während sie spricht, kannst du auf das Overlay klicken, um die Wiedergabe zu stoppen.
+- **Du kannst sie mit der Maus überall hinziehen** — sowohl im Browser-Tab als auch im Overlay. Die Position wird gespeichert und beim nächsten Erscheinen wiederhergestellt. Ein Klick ohne Ziehen bleibt ein Klick (Stopp/Read-aloud); erst ab einer kleinen Bewegung wird es als Ziehen gewertet.
+- Der Sprachbubble zeigt den aktuell gesprochenen Satz.
+- Das Overlay bezieht seinen Zustand über `/api/overlay-state` vom lokalen Server — die Browser-App meldet dort, wann sie spricht.
+
+### Beenden
+
+Im Fenster des Overlays `Ctrl+C` drücken oder die Electron-Prozesse beenden.
+
+### Hinweise
+
+- Das Overlay funktioniert nur auf Windows (die App ist insgesamt Windows-orientiert).
+- Falls du einen anderen Port als 4173 verwendest, starte das Overlay mit:
+
+  ```powershell
+  $env:ABGAI_SERVER="http://127.0.0.1:3000"
+  npm run overlay
+  ```
+
 ## Notizen
 
 Die Notes-Funktion speichert Notizen lokal im Browser.
@@ -570,6 +665,21 @@ Open Calculator
 ```
 
 Unterstützte Programme umfassen unter anderem Spotify, VS Code, Chrome, Firefox, Edge, File Explorer, Notepad, Calculator, PowerShell, Task Manager, Settings, Discord, Slack, Telegram, WhatsApp, Obsidian, Terminal, Paint und Snipping Tool.
+
+**Voller Zugriff auf alle installierten Apps:** Die KI ist nicht auf die Whitelist beschränkt. Wenn du sie bittest, irgendein Programm zu öffnen (z. B. Steam, Blender, OBS, Audacity, ein Spiel), verwendet sie den App-Namen direkt als Ziel. Der Server findet die App über mehrere Fallbacks: bekannte Installationspfade (Program Files, LocalAppData, System32), Startmenü-Verknüpfungen (`.lnk`), UWP/Microsoft-Store-Apps (ohne `.lnk`, via `Get-StartApps` + `shell:AppsFolder`), die Windows-Registry (`App Paths`), den PATH und registrierte URI-Schemata (z. B. `spotify:`, `discord:`, `ms-settings:`, `ms-windows-store:`). Tote Verknüpfungen (Ziel nicht mehr vorhanden) werden übersprungen. Wenn eine App wirklich nicht installiert ist, meldet die App das klar (z. B. „Could not find "vlc" on this PC.“), statt still zu scheitern. **Jede Aktion benötigt weiterhin deine ausdrückliche Bestätigung** — die KI kann nichts ohne dein OK starten.
+
+### Webseiten öffnen
+
+Die KI kann zusätzlich Webseiten im Standardbrowser öffnen — entweder über bekannte Site-Namen oder direkt per Domain:
+
+```text
+Open YouTube
+Open github
+Open example.com
+Open docs.python.org
+```
+
+Unterstützte bekannte Namen: youtube, google, github, reddit, twitter/x, wikipedia, twitch, amazon, netflix, roblox, gmail, maps. Alles andere, was wie eine Domain aussieht (`.com`, `.org`, `.io`, …), wird als `https://www.<domain>` geöffnet.
 
 ### Ordner öffnen
 
@@ -760,7 +870,8 @@ Die wichtigsten Dateien sind:
 | `app.js` | Frontend-Zustand, Chat, Recherche, TTS, Notizen, Podcasts und PC-Aktionsdialoge |
 | `server.js` | lokaler HTTP-Server, Ollama-Proxy, Recherche-Fallbacks, TTS-Proxy, Bild-Proxy und Systemaktionen |
 | `kokoro_server.py` | optionaler lokaler Kokoro-TTS-Dienst |
-| `package.json` | npm-Skripte `start` und `dev` |
+| `overlay/` | Electron-Overlay-App (Great Sage über anderen Apps, `npm run overlay`) |
+| `package.json` | npm-Skripte `start`, `dev` und `overlay` |
 | `podcasts/` | lokal gespeicherte erzeugte WAV-Podcasts |
 
 Startskripte:
