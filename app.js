@@ -785,6 +785,18 @@
           startNewChat();
         }
       }
+      // Ctrl+Shift+Space (or Cmd+Shift+Space): toggle Great Sage listening
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'Space') {
+        event.preventDefault();
+        if (!isVoiceInputSupported()) {
+          showToast('Voice recognition needs Chrome or Edge.');
+          return;
+        }
+        toggleWakeMode();
+        showToast(state.wakeMode
+          ? "Great Sage is listening — say 'Great Sage' + your command. (Ctrl+Shift+Space stops it)"
+          : 'Great Sage listening stopped.');
+      }
     });
 
     elements.pccmdDeny.addEventListener('click', () => finishToolConfirm(false));
@@ -3213,7 +3225,9 @@
     elements.wakeButton.classList.toggle('wake-woken', active && state.wakeWoken);
     elements.wakeButton.innerHTML = WAVE_ICON;
     elements.wakeButton.setAttribute('aria-label', active ? 'Stop listening for Great Sage' : 'Listen for Great Sage');
-    elements.wakeButton.title = active ? "Stop listening for 'Great Sage'" : "Listen for 'Great Sage'";
+    elements.wakeButton.title = active
+      ? "Stop listening for 'Great Sage' (Ctrl+Shift+Space)"
+      : "Listen for 'Great Sage' (Ctrl+Shift+Space)";
     if (!active) setWakeStatus('');
   }
 
