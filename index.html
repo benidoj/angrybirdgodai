@@ -110,6 +110,10 @@
               <span class="status-dot"></span>
               <span id="connectionText">Connecting</span>
             </div>
+            <button class="icon-button" id="themeToggleButton" type="button" aria-label="Switch to light theme" title="Toggle light / dark theme">
+              <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+              <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" aria-hidden="true" class="hidden"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.8v2.2M12 19v2.2M2.8 12h2.2M19 12h2.2M5.1 5.1l1.6 1.6M17.3 17.3l1.6 1.6M18.9 5.1l-1.6 1.6M6.7 17.3l-1.6 1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </button>
             <button class="icon-button" id="topSettingsButton" type="button" aria-label="Open settings" title="Settings">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" stroke="currentColor" stroke-width="1.6"/><path d="m19.1 13.4 1.2.9-1.8 3.1-1.4-.6a7.7 7.7 0 0 1-1.7 1l-.2 1.5h-3.6l-.2-1.5a7.7 7.7 0 0 1-1.7-1l-1.4.6-1.8-3.1 1.2-.9a7.2 7.2 0 0 1 0-2.8l-1.2-.9 1.8-3.1 1.4.6a7.7 7.7 0 0 1 1.7-1l.2-1.5h3.6l.2 1.5a7.7 7.7 0 0 1 1.7 1l1.4-.6 1.8 3.1-1.2.9a7.2 7.2 0 0 1 0 2.8Z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/></svg>
             </button>
@@ -333,6 +337,8 @@
           </button>
         </div>
         <p class="modal-description">AngryBirdGodAI researches the web before each answer and shows the source links below it. Your prompt is sent to the local model and to DuckDuckGo for research.</p>
+        <section class="settings-section">
+          <div class="section-heading"><span>Connection</span><small>Ollama + models</small></div>
         <label class="field-label" for="endpointInput">Ollama endpoint</label>
         <div class="field-wrap"><span class="field-prefix">↗</span><input id="endpointInput" type="text" spellcheck="false" /></div>
         <label class="field-label" for="modelInput">Model tag</label>
@@ -341,6 +347,9 @@
         <label class="field-label" for="visionModelInput">Vision model tag (optional)</label>
         <div class="field-wrap"><span class="field-prefix">👁</span><input id="visionModelInput" type="text" spellcheck="false" placeholder="e.g. llama3.2-vision" /></div>
         <div class="model-hint"><span class="hint-dot"></span><span>When set, the AI describes example images before embedding them. Leave empty to disable image understanding. Try <code>ollama run llama3.2-vision</code> or <code>minicpm-v</code>.</span></div>
+        </section>
+        <section class="settings-section">
+          <div class="section-heading"><span>Web research</span><small>Sources & citations</small></div>
         <label class="research-setting" for="researchEnabledInput">
           <span class="research-setting-copy">
             <strong>Research before every answer</strong>
@@ -371,6 +380,7 @@
             <span class="speech-toggle-track" aria-hidden="true"></span>
           </span>
         </label>
+        </section>
         <div class="generation-controls">
           <div class="control-heading">
             <span>Generation controls</span>
@@ -413,21 +423,21 @@
             </select>
           </div>
         </div>
-        <label class="speech-setting" for="autoReadInput">
-          <span class="speech-setting-copy">
-            <strong>Read replies aloud</strong>
-            <small>Automatically speak each completed response</small>
-          </span>
-          <span class="speech-toggle">
-            <input id="autoReadInput" type="checkbox" />
-            <span class="speech-toggle-track" aria-hidden="true"></span>
-          </span>
-        </label>
         <div class="speech-controls generation-controls" id="speechControls">
           <div class="control-heading">
             <span>Speech output</span>
             <small>Read aloud + Great Sage acknowledgments</small>
           </div>
+          <label class="speech-setting" for="autoReadInput">
+            <span class="speech-setting-copy">
+              <strong>Read replies aloud</strong>
+              <small>Automatically speak each completed response</small>
+            </span>
+            <span class="speech-toggle">
+              <input id="autoReadInput" type="checkbox" />
+              <span class="speech-toggle-track" aria-hidden="true"></span>
+            </span>
+          </label>
           <div class="control-row">
             <div class="control-label-row">
               <label class="field-label" for="ttsBackendInput">TTS engine</label>
@@ -519,6 +529,9 @@
             <div class="range-scale"><span>Quiet</span><span>Loud</span></div>
           </div>
         </div>
+        </section>
+        <section class="settings-section">
+          <div class="section-heading"><span>Voice activation</span><small>Wake word</small></div>
         <label class="wake-setting" for="autoWakeInput">
           <span class="wake-setting-copy">
             <strong>Auto-start “Great Sage” listening</strong>
@@ -529,6 +542,7 @@
             <span class="speech-toggle-track" aria-hidden="true"></span>
           </span>
         </label>
+        </section>
         <div class="modal-status" id="modalStatus"></div>
         <div class="modal-actions">
           <button class="secondary-button" id="checkConnectionButton" type="button">Test connection</button>

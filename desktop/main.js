@@ -3,11 +3,34 @@
 // normal desktop window — like Steam: Start Menu icon, taskbar, real window.
 const { app, BrowserWindow, shell, Menu } = require('electron');
 const { spawn } = require('child_process');
+const net = require('net');
 const path = require('path');
 const http = require('http');
 
-const PORT = Number(process.env.PORT) > 0 ? Number(process.env.PORT) : 4173;
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+// Find a free port so the app still boots when something else (another dev
+// server, another app) already owns the default port.
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(port, '127.0.0.1');
+  });
+}
+
+async function pickPort() {
+  if (Number(process.env.PORT) > 0) return Number(process.env.PORT);
+  const preferred = [4173, 4174, 4175, 4176, 4177, 4178];
+  for (const port of preferred) {
+    if (await isPortFree(port)) return port;
+  }
+  // Last resort: try random high ports (server.js treats 0 as "unset").
+  for (let i = 0; i < 20; i += 1) {
+    const port = 20000 + Math.floor(Math.random() * 40000);
+    if (await isPortFree(port)) return port;
+  }
+  return 4173; // give up and let server.js surface the bind error
+}
 
 // Resolve the directory containing server.js and web assets.
 // Dev mode: files are copied into desktop/.
@@ -103,7 +126,12 @@ function createWindow() {
   });
 }
 
+let PORT = Number(process.env.PORT) > 0 ? Number(process.env.PORT) : 4173;
+let BASE_URL = `http://127.0.0.1:${PORT}`;
+
 app.whenReady().then(async () => {
+  PORT = await pickPort();
+  BASE_URL = `http://127.0.0.1:${PORT}`;
   startServer();
   try {
     await waitForServer();

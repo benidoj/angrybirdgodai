@@ -19,11 +19,51 @@
   --sidebar-width: 274px;
   --topbar-height: 72px;
   --radius: 16px;
+  /* Elevation tokens: layered soft shadows + top edge highlight */
+  --shadow-rest: 0 1px 2px rgba(0, 0, 0, 0.22), 0 3px 10px rgba(0, 0, 0, 0.14);
+  --shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.24), 0 8px 22px rgba(0, 0, 0, 0.2);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 6px 18px rgba(0, 0, 0, 0.16), 0 16px 42px rgba(0, 0, 0, 0.12);
+  --shadow-accent: 0 2px 5px rgba(0, 0, 0, 0.24), 0 6px 16px rgba(226, 54, 36, 0.26);
+  --shadow-accent-hover: 0 3px 6px rgba(0, 0, 0, 0.26), 0 10px 24px rgba(226, 54, 36, 0.34);
+  --edge-top: inset 0 1px 0 rgba(255, 235, 220, 0.07);
+  /* Shared motion curves — one feel across the whole app */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-swift: cubic-bezier(0.4, 0, 0.2, 1);
   font-family: 'Manrope', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+/* ============================================================
+   Light theme — clean warm-paper look. Overriding the tokens
+   recolors every surface that uses var(); the overrides below
+   patch the spots that hardcode dark colors.
+   ============================================================ */
+html[data-theme='light'] {
+  --bg: #f5f1ea;
+  --bg-deep: #ede7dd;
+  --panel: #ffffff;
+  --panel-raised: #fbf8f3;
+  --panel-hover: #f3ede3;
+  --line: rgba(58, 44, 34, 0.14);
+  --line-bright: rgba(58, 44, 34, 0.22);
+  --text: #2b2118;
+  --soft-text: #4a3b2f;
+  --muted: #7a695c;
+  --faint: #a5947f;
+  --accent: #e04430;
+  --accent-deep: #c23522;
+  --amber: #d98f1f;
+  --mint: #2e9c68;
+  --edge-top: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --shadow-rest: 0 1px 2px rgba(74, 59, 47, 0.1), 0 3px 10px rgba(74, 59, 47, 0.08);
+  --shadow-hover: 0 2px 4px rgba(74, 59, 47, 0.12), 0 8px 22px rgba(74, 59, 47, 0.12);
+  --shadow-card: 0 1px 2px rgba(74, 59, 47, 0.1), 0 6px 18px rgba(74, 59, 47, 0.1), 0 16px 42px rgba(74, 59, 47, 0.08);
+  --shadow-accent: 0 2px 5px rgba(224, 68, 48, 0.22), 0 6px 16px rgba(224, 68, 48, 0.18);
+  --shadow-accent-hover: 0 3px 6px rgba(224, 68, 48, 0.26), 0 10px 24px rgba(224, 68, 48, 0.24);
+  background: var(--bg);
 }
 
 * {
@@ -146,7 +186,7 @@ textarea:focus-visible {
   color: var(--muted);
   background: transparent;
   border-radius: 9px;
-  transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out), transform 140ms var(--ease-out);
 }
 
 .icon-button:hover,
@@ -186,7 +226,7 @@ textarea:focus-visible {
   background: linear-gradient(130deg, #f94a33 0%, #d9382b 100%);
   border-radius: 11px;
   box-shadow: 0 8px 24px rgba(203, 47, 33, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+  transition: transform 140ms var(--ease-out), box-shadow 140ms var(--ease-out), filter 140ms var(--ease-out);
 }
 
 .new-chat-button:hover {
@@ -240,7 +280,7 @@ textarea:focus-visible {
   text-align: left;
   background: transparent;
   border-radius: 9px;
-  transition: color 160ms ease, background 160ms ease;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
 }
 
 .nav-item svg {
@@ -330,7 +370,7 @@ textarea:focus-visible {
   text-align: left;
   background: transparent;
   border-radius: 8px;
-  transition: color 160ms ease, background 160ms ease;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
 }
 
 .conversation-item:hover,
@@ -752,7 +792,7 @@ textarea:focus-visible {
   background: rgba(35, 29, 26, 0.78);
   border: 1px solid var(--line);
   border-radius: 12px;
-  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  transition: background 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
 }
 
 .suggestion-card:hover {
@@ -825,7 +865,7 @@ textarea:focus-visible {
   height: 16px;
   margin-left: auto;
   color: var(--faint);
-  transition: color 160ms ease, transform 160ms ease;
+  transition: color 140ms var(--ease-out), transform 140ms var(--ease-out);
 }
 
 .suggestion-card:hover .card-arrow {
@@ -969,24 +1009,13 @@ textarea:focus-visible {
   border: 1px solid var(--line-bright);
   border-radius: 16px;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.2), 0 0 0 5px rgba(255, 255, 255, 0.012);
-  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+  transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out), background 160ms var(--ease-out);
 }
 
 .composer-box.drag-active {
   background: rgba(77, 43, 35, 0.94);
   border-color: rgba(255, 181, 69, 0.65);
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.24), 0 0 0 5px rgba(255, 181, 69, 0.08);
-}
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  min-height: 64px;
-  padding: 11px 11px 11px 18px;
-  background: rgba(40, 33, 30, 0.94);
-  border: 1px solid var(--line-bright);
-  border-radius: 16px;
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.2), 0 0 0 5px rgba(255, 255, 255, 0.012);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .composer-box:focus-within {
@@ -1027,7 +1056,7 @@ textarea:focus-visible {
   color: var(--muted);
   background: transparent;
   border-radius: 9px;
-  transition: color 160ms ease, background 160ms ease;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
 }
 
 .composer-tool:hover {
@@ -1120,7 +1149,7 @@ textarea:focus-visible {
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid var(--line);
   border-radius: 8px;
-  transition: color 160ms ease, background 160ms ease;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
 }
 
 .model-chip:hover {
@@ -1487,7 +1516,7 @@ textarea:focus-visible {
   border: 1px solid transparent;
   border-radius: 7px;
   white-space: nowrap;
-  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out), border-color 140ms var(--ease-out);
 }
 
 .regenerate-note-action {
@@ -1754,7 +1783,7 @@ em.image-caption {
   background: #191513;
   border: 1px solid var(--line);
   border-radius: 9px;
-  transition: border-color 160ms ease;
+  transition: border-color 140ms var(--ease-out);
 }
 
 .field-wrap:focus-within {
@@ -2112,7 +2141,7 @@ em.image-caption {
   font-size: 11px;
   font-weight: 700;
   border-radius: 8px;
-  transition: background 160ms ease, transform 160ms ease;
+  transition: background 140ms var(--ease-out), transform 140ms var(--ease-out);
 }
 
 .secondary-button {
@@ -2232,7 +2261,7 @@ em.image-caption {
   border: 1px solid var(--line-mid);
   border-radius: 8px;
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background 120ms var(--ease-out);
 }
 
 .pccmd-deny:hover {
@@ -2249,7 +2278,7 @@ em.image-caption {
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 120ms ease, transform 80ms ease;
+  transition: background 120ms var(--ease-out), transform 80ms var(--ease-out);
 }
 
 .pccmd-confirm:hover {
@@ -2341,7 +2370,7 @@ em.image-caption {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--line);
   border-radius: 9px;
-  transition: border-color 160ms ease;
+  transition: border-color 140ms var(--ease-out);
 }
 
 .notes-search:focus-within {
@@ -2408,7 +2437,7 @@ em.image-caption {
   background: rgba(255, 255, 255, 0.055);
   border: 1px solid var(--line);
   border-radius: 0 9px 9px 0;
-  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out), border-color 140ms var(--ease-out), transform 140ms var(--ease-out);
 }
 
 .notes-export-button:hover:not(:disabled) {
@@ -2441,7 +2470,7 @@ em.image-caption {
   background: linear-gradient(130deg, #f94a33 0%, #d9382b 100%);
   border-radius: 9px;
   box-shadow: 0 7px 18px rgba(203, 47, 33, 0.2);
-  transition: transform 160ms ease, filter 160ms ease;
+  transition: transform 140ms var(--ease-out), filter 140ms var(--ease-out);
 }
 
 .new-note-button:hover {
@@ -2506,7 +2535,7 @@ em.image-caption {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 9px;
-  transition: background 160ms ease, border-color 160ms ease;
+  transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out);
 }
 
 .notes-item:hover {
@@ -2729,7 +2758,7 @@ em.image-caption {
     z-index: 10;
     box-shadow: 20px 0 60px rgba(0, 0, 0, 0.38);
     transform: translateX(-102%);
-    transition: transform 220ms ease;
+    transition: transform 240ms var(--ease-swift);
   }
 
   .sidebar.open {
@@ -3121,7 +3150,7 @@ em.image-caption {
   outline: none;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
-  transition: border-color 160ms ease;
+  transition: border-color 140ms var(--ease-out);
 }
 
 .podcast-script:focus {
@@ -3549,5 +3578,943 @@ em.image-caption {
   .sage-swoosh,
   .sage-mote {
     animation: none;
+  }
+}
+
+/* ============================================================
+   Elevation & smoothness layer
+   Every card, chip and button now sits slightly above the UI:
+   a soft ambient drop shadow + a 1px top edge highlight give
+   quiet depth, hovers lift controls a hair, and all motion
+   shares one springy-but-quick curve (--ease-out / --ease-swift).
+   ============================================================ */
+
+/* --- Cards & panels --- */
+.suggestion-card {
+  box-shadow: var(--shadow-rest), var(--edge-top);
+}
+
+.suggestion-card:hover {
+  box-shadow: var(--shadow-hover), var(--edge-top);
+}
+
+.composer-box {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.18),
+    0 18px 45px rgba(0, 0, 0, 0.28),
+    var(--edge-top);
+}
+
+.composer-box:focus-within {
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    0 18px 45px rgba(0, 0, 0, 0.32),
+    var(--edge-top);
+}
+
+.local-card,
+.connection-pill,
+.model-chip,
+.deep-toggle,
+.generation-controls,
+.diagnostics-panel {
+  box-shadow: var(--shadow-rest), var(--edge-top);
+}
+
+.notes-body,
+.podcast-config,
+.podcast-output {
+  box-shadow: var(--shadow-card), var(--edge-top);
+}
+
+.source-list,
+.pccmd-box,
+.message-error {
+  box-shadow: var(--shadow-rest), var(--edge-top);
+}
+
+/* --- Buttons & chips: soft rest shadow, hover lift --- */
+.icon-button,
+.tiny-button,
+.composer-tool,
+.message-action {
+  box-shadow: var(--shadow-rest);
+}
+
+.icon-button:hover,
+.tiny-button:hover,
+.composer-tool:hover,
+.message-action:hover,
+.message-action.active {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
+}
+
+.icon-button:active,
+.tiny-button:active,
+.composer-tool:active,
+.message-action:active {
+  transform: translateY(0);
+}
+
+.composer-tool,
+.message-action {
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out), transform 140ms var(--ease-out);
+}
+
+.message-action:hover {
+  transform: none;
+}
+
+.preset-btn {
+  box-shadow: var(--shadow-rest), var(--edge-top);
+  transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out),
+    transform 120ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+
+.preset-btn:hover {
+  box-shadow: var(--shadow-hover), var(--edge-top);
+  transform: translateY(-1px);
+}
+
+.preset-btn:active {
+  transform: translateY(0);
+}
+
+.secondary-button {
+  box-shadow: var(--shadow-rest), var(--edge-top);
+  transition: background 140ms var(--ease-out), transform 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
+}
+
+.secondary-button:hover {
+  box-shadow: var(--shadow-hover), var(--edge-top);
+  transform: translateY(-1px);
+}
+
+.secondary-button:active {
+  transform: translateY(0);
+}
+
+/* --- Accent buttons: deeper colored glow so they pop --- */
+.send-button {
+  box-shadow: var(--shadow-accent), var(--edge-top);
+  transition: background 140ms var(--ease-out), transform 140ms var(--ease-out),
+    opacity 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+
+.send-button:hover {
+  box-shadow: var(--shadow-accent-hover), var(--edge-top);
+}
+
+.send-button:active {
+  transform: translateY(1px) scale(0.97);
+}
+
+.save-button {
+  box-shadow: var(--shadow-accent), var(--edge-top);
+  transition: background 140ms var(--ease-out), transform 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
+}
+
+.save-button:hover {
+  box-shadow: var(--shadow-accent-hover), var(--edge-top);
+}
+
+.new-chat-button,
+.new-note-button {
+  box-shadow: var(--shadow-accent), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.new-chat-button:hover,
+.new-note-button:hover {
+  box-shadow: var(--shadow-accent-hover), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* --- Inputs & selects: recessed body, lifted focus --- */
+.field-wrap,
+.control-select,
+.notes-search,
+.notes-export-select,
+.notes-export-button,
+.podcast-topic-input,
+.podcast-script {
+  box-shadow: var(--shadow-rest);
+}
+
+.field-wrap:focus-within,
+.control-select:focus,
+.notes-search:focus-within,
+.podcast-topic-input:focus,
+.podcast-script:focus {
+  box-shadow: var(--shadow-hover);
+}
+
+.control-range::-webkit-slider-thumb {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.control-range::-moz-range-thumb {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Toggles: pill gets a touch of depth --- */
+.speech-toggle-track {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.speech-toggle-track::after {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+/* --- Sidebar active items float just a hair --- */
+.conversation-item.active,
+.notes-item.active {
+  box-shadow: var(--shadow-rest);
+}
+
+/* --- Respect reduced motion: no hover lifts --- */
+@media (prefers-reduced-motion: reduce) {
+  .icon-button:hover,
+  .tiny-button:hover,
+  .composer-tool:hover,
+  .preset-btn:hover,
+  .secondary-button:hover,
+  .send-button:hover,
+  .save-button:hover {
+    transform: none;
+  }
+}
+
+/* ============================================================
+   Motion layer: views, modals and overlays ease in AND out.
+   JS plays an exit beat (.is-leaving, ~150ms) before .hidden
+   lands, so panels shrink away instead of snapping off.
+   ============================================================ */
+
+/* Entrances (backwards fill = no lingering transform) */
+.chat-area,
+.notes-view,
+.podcast-view {
+  animation: view-in 220ms var(--ease-out) backwards;
+}
+
+.modal-backdrop {
+  animation: view-in 200ms var(--ease-out) backwards;
+}
+
+.modal-backdrop .settings-modal {
+  animation: modal-in 240ms var(--ease-out) backwards;
+}
+
+.pccmd-overlay {
+  animation: view-in 200ms var(--ease-out) backwards;
+}
+
+.pccmd-overlay .pccmd-box {
+  animation: modal-in 240ms var(--ease-out) backwards;
+}
+
+.toast {
+  animation: toast-in 220ms var(--ease-out) backwards;
+}
+
+/* Exit beat */
+.is-leaving {
+  pointer-events: none;
+  animation: view-out 150ms var(--ease-swift) forwards;
+}
+
+.modal-backdrop.is-leaving {
+  animation: modal-out 150ms var(--ease-swift) forwards;
+}
+
+.modal-backdrop.is-leaving .settings-modal {
+  animation: panel-out 150ms var(--ease-swift) forwards;
+}
+
+.pccmd-overlay.is-leaving {
+  animation: modal-out 150ms var(--ease-swift) forwards;
+}
+
+.pccmd-overlay.is-leaving .pccmd-box {
+  animation: panel-out 150ms var(--ease-swift) forwards;
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.996);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes view-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.996);
+  }
+}
+
+@keyframes modal-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-area,
+  .notes-view,
+  .podcast-view,
+  .modal-backdrop,
+  .modal-backdrop .settings-modal,
+  .pccmd-overlay,
+  .pccmd-overlay .pccmd-box,
+  .toast,
+  .is-leaving,
+  .modal-backdrop.is-leaving .settings-modal,
+  .pccmd-overlay.is-leaving .pccmd-box {
+    animation-duration: 1ms !important;
+  }
+}
+
+/* ============================================================
+   Accent hover glow: message bubbles and note cards pick up a
+   soft halo in their own accent color while hovered.
+   ============================================================ */
+
+.message-content,
+.user-row .message-content {
+  transition: box-shadow 200ms var(--ease-out), border-color 200ms var(--ease-out);
+}
+
+.message-content:hover {
+  box-shadow: 0 0 0 1px rgba(255, 122, 96, 0.16), 0 0 18px rgba(255, 96, 70, 0.13);
+}
+
+.user-row .message-content:hover {
+  box-shadow: 0 0 0 1px rgba(255, 181, 69, 0.16), 0 0 18px rgba(255, 181, 69, 0.12);
+}
+
+.notes-item {
+  transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
+}
+
+.notes-item:hover {
+  box-shadow: 0 0 0 1px rgba(255, 181, 69, 0.14), 0 0 16px rgba(255, 181, 69, 0.1);
+}
+
+.notes-item.active {
+  box-shadow: 0 0 0 1px rgba(255, 181, 69, 0.2), 0 0 18px rgba(255, 181, 69, 0.11);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-content,
+  .user-row .message-content,
+  .notes-item {
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ============================================================
+   Light theme: patch hardcoded dark colors. Appended last so
+   every override wins the cascade.
+   ============================================================ */
+
+html[data-theme='light'] body {
+  background: var(--bg);
+}
+
+html[data-theme='light'] .app-shell {
+  background: radial-gradient(circle at 76% 0%, rgba(224, 68, 48, 0.05), transparent 32%), var(--bg);
+}
+
+html[data-theme='light'] .sidebar {
+  background: rgba(250, 247, 241, 0.97);
+}
+
+html[data-theme='light'] .glow-one {
+  background: radial-gradient(ellipse, rgba(224, 68, 48, 0.06), transparent 70%);
+}
+
+html[data-theme='light'] .glow-two {
+  background: radial-gradient(ellipse, rgba(217, 143, 31, 0.05), transparent 70%);
+}
+
+html[data-theme='light'] .connection-pill,
+html[data-theme='light'] .model-chip,
+html[data-theme='light'] .deep-toggle,
+html[data-theme='light'] .local-card,
+html[data-theme='light'] .generation-controls,
+html[data-theme='light'] .diagnostics-panel,
+html[data-theme='light'] .diag-item,
+html[data-theme='light'] .notes-search,
+html[data-theme='light'] .podcast-topic-input {
+  background: rgba(58, 44, 34, 0.045);
+}
+
+html[data-theme='light'] .icon-button:hover,
+html[data-theme='light'] .tiny-button:hover,
+html[data-theme='light'] .composer-tool:hover,
+html[data-theme='light'] .profile-row:hover,
+html[data-theme='light'] .nav-item:hover,
+html[data-theme='light'] .nav-item.active,
+html[data-theme='light'] .conversation-item:hover,
+html[data-theme='light'] .conversation-item.active,
+html[data-theme='light'] .notes-item:hover,
+html[data-theme='light'] .preset-btn,
+html[data-theme='light'] .secondary-button,
+html[data-theme='light'] .notes-export-button,
+html[data-theme='light'] .deep-toggle:hover,
+html[data-theme='light'] .model-chip:hover {
+  background: rgba(58, 44, 34, 0.07);
+}
+
+html[data-theme='light'] .preset-btn:hover,
+html[data-theme='light'] .secondary-button:hover,
+html[data-theme='light'] .notes-export-button:hover,
+html[data-theme='light'] .podcast-topic-input:focus {
+  background: rgba(58, 44, 34, 0.1);
+}
+
+html[data-theme='light'] .research-setting {
+  background: rgba(217, 143, 31, 0.09);
+  border-color: rgba(217, 143, 31, 0.22);
+}
+
+html[data-theme='light'] .speech-setting {
+  background: rgba(46, 156, 104, 0.08);
+  border-color: rgba(46, 156, 104, 0.22);
+}
+
+html[data-theme='light'] .wake-setting {
+  background: rgba(224, 68, 48, 0.06);
+  border-color: rgba(224, 68, 48, 0.2);
+}
+
+html[data-theme='light'] .composer-box {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+html[data-theme='light'] .composer-box:focus-within {
+  box-shadow: 0 2px 6px rgba(74, 59, 47, 0.12), 0 18px 45px rgba(74, 59, 47, 0.14), 0 0 0 5px rgba(217, 143, 31, 0.12), var(--edge-top);
+}
+
+html[data-theme='light'] .composer-box.drag-active {
+  background: rgba(255, 238, 210, 0.94);
+}
+
+html[data-theme='light'] .attachment-chip,
+html[data-theme='light'] .message-attachment {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+html[data-theme='light'] .user-row .message-content {
+  background: #efe6d8;
+  border-color: rgba(58, 44, 34, 0.14);
+  color: #3d2f24;
+}
+
+html[data-theme='light'] .message-content strong {
+  color: #211913;
+}
+
+html[data-theme='light'] .message-content em {
+  color: #b06a2a;
+}
+
+html[data-theme='light'] .message-content code {
+  color: #a96a10;
+  background: rgba(217, 143, 31, 0.12);
+  border-color: rgba(217, 143, 31, 0.22);
+}
+
+html[data-theme='light'] .message-content pre {
+  background: #2b2521;
+  border-color: rgba(58, 44, 34, 0.2);
+}
+
+html[data-theme='light'] .message-error {
+  background: rgba(224, 68, 48, 0.07);
+  border-color: rgba(224, 68, 48, 0.25);
+  color: #b03a26;
+}
+
+html[data-theme='light'] .message-avatar {
+  background: linear-gradient(140deg, #b39a7d, #8a705a);
+  border-color: rgba(120, 90, 60, 0.3);
+}
+
+html[data-theme='light'] .message-avatar.ai {
+  border-color: rgba(224, 68, 48, 0.3);
+}
+
+html[data-theme='light'] .profile-avatar,
+html[data-theme='light'] .top-avatar,
+html[data-theme='light'] .crumb-avatar {
+  background: linear-gradient(145deg, #b39a7d, #8a705a);
+  border-color: rgba(120, 90, 60, 0.3);
+}
+
+html[data-theme='light'] .researching-indicator {
+  color: #8a6a3a;
+}
+
+html[data-theme='light'] .regenerate-note-action {
+  color: #9a6b1a;
+}
+
+html[data-theme='light'] .hero-content h1 {
+  color: #241b13;
+}
+
+html[data-theme='light'] .suggestion-card {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+html[data-theme='light'] .suggestion-icon.coral {
+  color: #c2402c;
+  background: rgba(224, 68, 48, 0.1);
+}
+
+html[data-theme='light'] .suggestion-icon.amber {
+  color: #a9721a;
+  background: rgba(217, 143, 31, 0.12);
+}
+
+html[data-theme='light'] .suggestion-icon.gold {
+  color: #8d4bc2;
+  background: rgba(141, 75, 194, 0.1);
+}
+
+html[data-theme='light'] .suggestion-icon.mint {
+  color: #2e9c68;
+  background: rgba(46, 156, 104, 0.1);
+}
+
+html[data-theme='light'] .source-list {
+  background: rgba(217, 143, 31, 0.07);
+  border-color: rgba(217, 143, 31, 0.22);
+}
+
+html[data-theme='light'] .source-copy a {
+  color: #9a6b1a;
+}
+
+html[data-theme='light'] .source-copy a:hover {
+  color: #7a5510;
+}
+
+html[data-theme='light'] .source-copy p {
+  color: #8a7a6a;
+}
+
+html[data-theme='light'] .source-item {
+  border-top-color: rgba(58, 44, 34, 0.1);
+}
+
+html[data-theme='light'] .source-images a,
+html[data-theme='light'] .inline-image {
+  border-color: var(--line);
+  background: rgba(58, 44, 34, 0.04);
+}
+
+html[data-theme='light'] em.image-caption {
+  border-left-color: rgba(154, 107, 26, 0.5);
+  background: rgba(58, 44, 34, 0.03);
+}
+
+html[data-theme='light'] .modal-backdrop {
+  background: rgba(58, 44, 34, 0.32);
+}
+
+html[data-theme='light'] .settings-modal,
+html[data-theme='light'] .pccmd-box {
+  background: #fdfbf7;
+}
+
+html[data-theme='light'] .pccmd-overlay {
+  background: rgba(58, 44, 34, 0.3);
+}
+
+html[data-theme='light'] .modal-header h2 {
+  color: #241b13;
+}
+
+html[data-theme='light'] .pccmd-deny {
+  border-color: var(--line-bright);
+}
+
+html[data-theme='light'] .toast {
+  background: #fffdf9;
+  color: #4a3b2f;
+}
+
+html[data-theme='light'] .field-wrap,
+html[data-theme='light'] .control-select,
+html[data-theme='light'] .notes-export-select {
+  background-color: #ffffff;
+}
+
+html[data-theme='light'] .control-select,
+html[data-theme='light'] .notes-export-select {
+  background-image: linear-gradient(45deg, transparent 50%, #7a695c 50%), linear-gradient(135deg, #7a695c 50%, transparent 50%);
+}
+
+html[data-theme='light'] #messageInput::placeholder,
+html[data-theme='light'] .note-title-input::placeholder,
+html[data-theme='light'] .note-content-input::placeholder {
+  color: #a5947f;
+}
+
+html[data-theme='light'] .note-title-input {
+  color: #241b13;
+}
+
+html[data-theme='light'] .control-range {
+  background: linear-gradient(90deg, var(--accent) 0 var(--range-progress, 47%), #ddd1c1 var(--range-progress, 47%) 100%);
+}
+
+html[data-theme='light'] .speech-controls .control-range {
+  background: linear-gradient(90deg, var(--mint) 0 var(--range-progress, 33%), #ddd1c1 var(--range-progress, 33%) 100%);
+}
+
+html[data-theme='light'] .control-range::-webkit-slider-thumb {
+  background: #ffffff;
+}
+
+html[data-theme='light'] .control-range::-moz-range-thumb {
+  background: #ffffff;
+}
+
+html[data-theme='light'] .speech-toggle-track {
+  background: #d8ccbc;
+}
+
+html[data-theme='light'] .speech-toggle-track::after {
+  background: #ffffff;
+}
+
+html[data-theme='light'] .speech-toggle input:checked + .speech-toggle-track {
+  background: rgba(46, 156, 104, 0.35);
+}
+
+html[data-theme='light'] .research-setting .speech-toggle input:checked + .speech-toggle-track,
+html[data-theme='light'] .wake-setting .speech-toggle input:checked + .speech-toggle-track {
+  background: rgba(217, 143, 31, 0.4);
+}
+
+html[data-theme='light'] .composer-tool.voice-listening,
+html[data-theme='light'] .composer-tool.wake-active {
+  color: #a9721a;
+  background: rgba(217, 143, 31, 0.14);
+}
+
+html[data-theme='light'] .composer-tool.wake-woken {
+  color: #2e9c68;
+  background: rgba(46, 156, 104, 0.14);
+}
+html[data-theme='light'] .voice-status.error,
+html[data-theme='light'] .wake-status.error,
+html[data-theme='light'] .modal-status.error {
+  color: #c04a30;
+}
+
+html[data-theme='light'] .attachment-remove:hover,
+html[data-theme='light'] .note-delete-button:hover {
+  color: #c04a30;
+  background: rgba(224, 68, 48, 0.1);
+}
+
+html[data-theme='light'] .diag-item.diag-err {
+  border-left-color: #c04a30;
+}
+
+html[data-theme='light'] .attachment-icon {
+  background: rgba(217, 143, 31, 0.14);
+}
+
+html[data-theme='light'] .composer-meta kbd {
+  color: #8a7a6a;
+}
+
+html[data-theme='light'] .meta-separator {
+  color: #b5a79a;
+}
+
+html[data-theme='light'] .generation-summary {
+  color: #7a695c;
+}
+
+html[data-theme='light'] .research-summary {
+  color: #a9721a;
+}
+
+html[data-theme='light'] .model-hint {
+  background: rgba(217, 143, 31, 0.08);
+}
+
+html[data-theme='light'] .model-hint code {
+  color: #7a695c;
+}
+
+html[data-theme='light'] .notes-body {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+html[data-theme='light'] .note-editor-pane {
+  background: rgba(250, 247, 241, 0.6);
+}
+
+html[data-theme='light'] .notes-item.active {
+  background: rgba(217, 143, 31, 0.09);
+  border-color: rgba(217, 143, 31, 0.25);
+}
+
+html[data-theme='light'] .notes-item.active .notes-item-header strong {
+  color: #6b4a12;
+}
+
+html[data-theme='light'] .notes-title-icon {
+  background: rgba(217, 143, 31, 0.12);
+  border-color: rgba(217, 143, 31, 0.22);
+}
+
+html[data-theme='light'] .podcast-config,
+html[data-theme='light'] .podcast-output {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+html[data-theme='light'] .podcast-title-icon {
+  background: rgba(46, 156, 104, 0.12);
+  border-color: rgba(46, 156, 104, 0.22);
+}
+
+html[data-theme='light'] .podcast-script {
+  background: #2b2521;
+  color: #e9d9ce;
+}
+
+html[data-theme='light'] .thread-view,
+html[data-theme='light'] .conversation-list,
+html[data-theme='light'] .notes-list-pane,
+html[data-theme='light'] .podcast-body,
+html[data-theme='light'] .note-content-input {
+  scrollbar-color: rgba(58, 44, 34, 0.22) transparent;
+}
+
+/* ============================================================
+   Accent hover glow: code blocks and source citations pick up
+   a soft amber halo while hovered (matches their accent).
+   ============================================================ */
+
+.message-content pre {
+  transition: border-color 140ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+
+.message-content pre:hover {
+  border-color: rgba(255, 181, 69, 0.28);
+  box-shadow: 0 0 0 1px rgba(255, 181, 69, 0.12), 0 0 18px rgba(255, 181, 69, 0.1);
+}
+
+.source-item {
+  border-radius: 8px;
+  transition: background 140ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+
+.source-item:hover {
+  background: rgba(255, 181, 69, 0.06);
+  box-shadow: 0 0 14px rgba(255, 181, 69, 0.1);
+}
+
+.source-copy a:hover {
+  text-shadow: 0 0 8px rgba(255, 181, 69, 0.35);
+}
+
+/* Light theme: slightly stronger halo so it reads on paper */
+html[data-theme='light'] .message-content pre:hover {
+  border-color: rgba(217, 143, 31, 0.4);
+  box-shadow: 0 0 0 1px rgba(217, 143, 31, 0.18), 0 0 18px rgba(217, 143, 31, 0.16);
+}
+
+html[data-theme='light'] .source-item:hover {
+  background: rgba(217, 143, 31, 0.08);
+  box-shadow: 0 0 14px rgba(217, 143, 31, 0.14);
+}
+
+html[data-theme='light'] .source-copy a:hover {
+  text-shadow: 0 0 8px rgba(217, 143, 31, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-content pre,
+  .source-item {
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ============================================================
+   Settings modal: grouped section cards so the modal speaks
+   the same card language as the rest of the app. Also gives
+   .control-text and .field-note (previously unstyled) proper
+   treatment.
+   ============================================================ */
+
+.settings-modal {
+  width: min(540px, 100%);
+}
+
+.settings-section {
+  padding: 16px 14px 14px;
+  margin-bottom: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-rest), var(--edge-top);
+}
+
+.settings-section:last-of-type {
+  margin-bottom: 6px;
+}
+
+.settings-section .section-heading {
+  padding: 0 2px 12px;
+  color: var(--soft-text);
+  font-family: 'Manrope', ui-sans-serif, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.settings-section .section-heading small {
+  color: var(--faint);
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+/* Fields inside a section no longer need their own heavy margins */
+.settings-section .field-wrap {
+  margin-bottom: 12px;
+}
+
+.settings-section .model-hint {
+  margin-bottom: 12px;
+}
+
+.settings-section .research-setting,
+.settings-section .speech-setting,
+.settings-section .wake-setting {
+  margin-bottom: 10px;
+}
+
+.settings-section .research-setting:last-child,
+.settings-section .speech-setting:last-child,
+.settings-section .wake-setting:last-child {
+  margin-bottom: 2px;
+}
+
+/* Text inputs used by the TTS engine rows (previously unstyled) */
+.control-text {
+  width: 100%;
+  height: 37px;
+  padding: 0 11px;
+  color: var(--soft-text);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  background-color: #191513;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
+}
+
+.control-text:focus {
+  border-color: rgba(255, 181, 69, 0.45);
+  box-shadow: var(--shadow-hover);
+}
+
+.control-text::placeholder {
+  color: var(--faint);
+}
+
+/* Status notes inside control rows (previously unstyled) */
+.field-note {
+  display: flex;
+  gap: 7px;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.field-note::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin-top: 5px;
+  background: var(--amber);
+  border-radius: 50%;
+}
+
+.field-note code {
+  color: #bfae9e;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+}
+
+/* Light theme variants */
+html[data-theme='light'] .settings-section {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+html[data-theme='light'] .settings-section .section-heading {
+  color: #241b13;
+}
+
+html[data-theme='light'] .control-text {
+  background-color: #ffffff;
+}
+
+html[data-theme='light'] .field-note code {
+  color: #7a695c;
+}
+
+@media (max-width: 480px) {
+  .settings-modal {
+    padding: 20px 16px;
+  }
+
+  .settings-section {
+    padding: 13px 11px 11px;
   }
 }

@@ -140,6 +140,9 @@
     profileButton: document.getElementById('profileButton'),
     sideSettingsButton: document.getElementById('sideSettingsButton'),
     topSettingsButton: document.getElementById('topSettingsButton'),
+    themeToggleButton: document.getElementById('themeToggleButton'),
+    themeIconMoon: document.getElementById('themeIconMoon'),
+    themeIconSun: document.getElementById('themeIconSun'),
     crumbTitle: document.getElementById('crumbTitle'),
     chatArea: document.getElementById('chatArea'),
     notesView: document.getElementById('notesView'),
@@ -279,6 +282,7 @@
     fishApiKey: 'sk-fish-FNkgQxhapxepQbrALNm3OkOFsWwVl5kuPhObC5_aQx0',
     fishReferenceId: '4c82a14548dc4b3e8d7dda68c9756c90',
     autoWake: false,
+    theme: 'dark',
     sageAvatarPos: null,
     conversations: [],
     activeConversationId: null,
@@ -321,6 +325,15 @@
     searchQuery: '',
     saveTimer: null,
   };
+
+  // Apply the saved theme to <html> before first paint to avoid a dark flash.
+  try {
+    const savedTheme = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null');
+    const theme = savedTheme && savedTheme.theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+  } catch (error) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
 
   loadState();
   loadNotes();
@@ -462,6 +475,7 @@
         fishApiKey: state.fishApiKey,
         fishReferenceId: state.fishReferenceId,
         autoWake: state.autoWake,
+        theme: state.theme,
         sageAvatarPos: state.sageAvatarPos,
         activeConversationId: state.activeConversationId,
         conversations: state.conversations.map((conversation) => ({
@@ -611,6 +625,7 @@
       button.addEventListener('click', openSettings);
     });
     elements.closeSettingsButton.addEventListener('click', closeSettings);
+    elements.themeToggleButton.addEventListener('click', toggleTheme);
     elements.settingsModal.addEventListener('click', (event) => {
       if (event.target === elements.settingsModal) closeSettings();
     });
@@ -1316,13 +1331,53 @@
 
   // ---------- Notes workspace ----------
 
+  // --- Theme toggle ---
+  function applyTheme(theme) {
+    const next = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    state.theme = next;
+    const light = next === 'light';
+    elements.themeIconMoon.classList.toggle('hidden', light);
+    elements.themeIconSun.classList.toggle('hidden', !light);
+    elements.themeToggleButton.setAttribute('aria-label', light ? 'Switch to dark theme' : 'Switch to light theme');
+    if (state.saveState) state.saveState();
+    saveState();
+  }
+
+  function toggleTheme() {
+    applyTheme(state.theme === 'light' ? 'dark' : 'light');
+  }
+
+  applyTheme(state.theme);
+
+  // Smooth show/hide: play a short exit beat (.is-leaving) before .hidden
+  // lands, and restart the entrance animation on reveal.
+  function revealWithTransition(el) {
+    if (!el) return;
+    el.classList.remove('is-leaving');
+    el.classList.remove('hidden');
+  }
+
+  function hideWithTransition(el) {
+    if (!el || el.classList.contains('hidden') || el.classList.contains('is-leaving')) return;
+    el.classList.add('is-leaving');
+    window.setTimeout(() => {
+      el.classList.remove('is-leaving');
+      el.classList.add('hidden');
+    }, 150);
+  }
+
   function setView(view) {
     currentView = view;
     const chat = view === 'chat';
     const notes = view === 'notes';
-    elements.chatArea.classList.toggle('hidden', !chat);
-    elements.notesView.classList.toggle('hidden', !notes);
-    elements.podcastView.classList.toggle('hidden', chat || notes);
+    const views = [elements.chatArea, elements.notesView, elements.podcastView];
+    const shown = chat ? elements.chatArea : notes ? elements.notesView : elements.podcastView;
+    views.forEach((v) => {
+      if (v === shown) return;
+      if (!v.classList.contains('hidden')) hideWithTransition(v);
+    });
+    revealWithTransition(shown);
     elements.homeButton.classList.toggle('active', chat);
     elements.notesButton.classList.toggle('active', notes);
     elements.podcastButton.classList.toggle('active', view === 'podcast');
@@ -2140,14 +2195,14 @@
         message = `Open ${name}?`;
       }
       elements.pccmdMessage.textContent = message;
-      elements.pccmdOverlay.classList.remove('hidden');
+      revealWithTransition(elements.pccmdOverlay);
       elements.pccmdConfirm.focus();
       pendingToolResolve = resolve;
     });
   }
 
   function finishToolConfirm(confirmed) {
-    elements.pccmdOverlay.classList.add('hidden');
+    hideWithTransition(elements.pccmdOverlay);
     if (pendingToolResolve) {
       pendingToolResolve(confirmed);
       pendingToolResolve = null;
@@ -3957,12 +4012,12 @@
     elements.contextLengthInput.value = String(state.contextLength);
     updateGenerationPreview();
     setModalStatus('');
-    elements.settingsModal.classList.remove('hidden');
+    revealWithTransition(elements.settingsModal);
     window.setTimeout(() => elements.endpointInput.focus(), 50);
   }
 
   function closeSettings() {
-    elements.settingsModal.classList.add('hidden');
+    hideWithTransition(elements.settingsModal);
   }
 
   function saveSettings() {
@@ -4193,9 +4248,10 @@
 
   function showToast(message) {
     window.clearTimeout(toastTimer);
+    elements.toast.classList.remove('is-leaving');
     elements.toast.textContent = message;
     elements.toast.classList.remove('hidden');
-    toastTimer = window.setTimeout(() => elements.toast.classList.add('hidden'), 3500);
+    toastTimer = window.setTimeout(() => hideWithTransition(elements.toast), 3500);
   }
 
   function titleFromMessage(message) {
