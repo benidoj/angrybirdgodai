@@ -14,8 +14,23 @@ const OLLAMA_PORT = Number(process.env.OLLAMA_PORT || 11434);
 const MAX_RESEARCH_QUERY_LENGTH = 800;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_PODCAST_BYTES = 100 * 1024 * 1024;
-const PODCAST_DIR = path.join(ROOT, 'podcasts');
-if (!fs.existsSync(PODCAST_DIR)) fs.mkdirSync(PODCAST_DIR, { recursive: true });
+// Podcast audio needs a writable directory. The install folder works for
+// per-user installs, but NOT for C:\Program Files or OneDrive-synced paths —
+// so fall back to the user data dir (or temp) when the install dir is read-only.
+function resolveWritableDir(candidate) {
+  try {
+    fs.mkdirSync(candidate, { recursive: true });
+    fs.accessSync(candidate, fs.constants.W_OK);
+    return candidate;
+  } catch (error) {
+    return null;
+  }
+}
+const ABG_DATA_DIR = process.env.ABG_DATA_DIR
+  || path.join(require('os').homedir(), '.angrybirdgodai');
+const PODCAST_DIR = resolveWritableDir(path.join(ROOT, 'podcasts'))
+  || resolveWritableDir(path.join(ABG_DATA_DIR, 'podcasts'))
+  || require('os').tmpdir();
 const MAX_DEEP_QUERIES = 5;
 const MAX_DEEP_SOURCES = 16;
 const MAX_DEEP_PAGE_FETCHES = 8;

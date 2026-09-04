@@ -73,13 +73,30 @@ function startServer() {
   // In dev mode they sit next to main.js.
   const serverPath = path.join(PROJECT_ROOT, 'server.js');
   try { logFd = require('fs').openSync(LOG_FILE, 'a'); } catch { logFd = null; }
-  const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT) };
-  serverProcess = spawn(process.execPath, [serverPath], {
-    env,
-    cwd: PROJECT_ROOT,
-    stdio: logFd ? ['ignore', logFd, logFd] : 'ignore',
+  const logWrite = (text) => { if (logFd) { try { require('fs').writeSync(logFd, text); } catch {} } };
+  logWrite(`
+--- boot ${new Date().toISOString()} port=${PORT} ---
+`);
+  const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT), ABG_DATA_DIR: LOG_DIR };
+  try {
+    serverProcess = spawn(process.execPath, [serverPath], {
+      env,
+      cwd: PROJECT_ROOT,
+      stdio: logFd ? ['ignore', logFd, logFd] : 'ignore',
+    });
+  } catch (error) {
+    logWrite(`SPAWN FAILED: ${error && error.stack ? error.stack : error}
+`);
+    serverProcess = null;
+    return;
+  }
+  serverProcess.on('error', (error) => {
+    logWrite(`SERVER ERROR: ${error && error.stack ? error.stack : error}
+`);
   });
   serverProcess.on('exit', (code) => {
+    logWrite(`SERVER EXITED code=${code}
+`);
     serverProcess = null;
     if (code && code !== 0 && mainWindow) {
       // Server crashed — close the window so the user notices.
@@ -104,13 +121,27 @@ function waitForServer(retries = 120) {
   });
 }
 
+function readLogTail(maxLines) {
+  const limit = maxLines || 30;
+  try {
+    const text = require('fs').readFileSync(LOG_FILE, 'utf8').trim();
+    const lines = text.split(String.fromCharCode(13)).join('').split(String.fromCharCode(10));
+    return lines.slice(-limit).join(String.fromCharCode(10));
+  } catch (error) {
+    return '(Log-Datei leer oder nicht lesbar / log file empty or unreadable)';
+  }
+}
+
 function errorPageHtml() {
+  const tail = readLogTail()
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `<html><body style="font-family:Segoe UI,sans-serif;background:#16130f;color:#f0e6d2;padding:40px;line-height:1.6">
     <h2>Server nicht erreichbar / Server not reachable</h2>
     <p>Die lokale Server-Komponente konnte nicht gestartet werden.</p>
     <p>Log-Datei: <code>${LOG_FILE}</code></p>
     <p>Mögliche Ursachen: Antivirus blockiert die App, oder ein anderes Programm belegt den Port.</p>
-    <button onclick="location.reload()" style="padding:8px 16px;margin-top:12px">Erneut versuchen / Retry</button>
+    <pre style="background:#241f18;border:1px solid #3a3226;border-radius:8px;padding:16px;white-space:pre-wrap;font-size:12px;max-height:45vh;overflow:auto">${tail}</pre>
+    <button onclick="location.href='${BASE_URL}'" style="padding:8px 16px;margin-top:12px">Erneut versuchen / Retry</button>
     </body></html>`;
 }
 
