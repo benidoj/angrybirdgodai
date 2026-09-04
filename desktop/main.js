@@ -2,6 +2,17 @@
 // Boots the local server (server.js) inside the app, then shows it in a
 // normal desktop window — like Steam: Start Menu icon, taskbar, real window.
 const { app, BrowserWindow, shell, Menu } = require('electron');
+
+// Some Windows GPU drivers render Electron windows as pure black.
+// Software rendering avoids that at a small performance cost.
+app.disableHardwareAcceleration();
+
+// Log server output so problems on other machines can be diagnosed.
+const LOG_DIR = (() => {
+  try { return require('electron').app.getPath('userData'); }
+  catch { return require('os').tmpdir(); }
+})();
+const LOG_FILE = require('path').join(LOG_DIR, 'server.log');
 const { spawn } = require('child_process');
 const net = require('net');
 const path = require('path');
@@ -41,6 +52,7 @@ const PROJECT_ROOT = isPackaged
   : __dirname;
 
 let serverProcess = null;
+let logFd = null;
 let mainWindow = null;
 
 // Single instance: clicking the icon again focuses the existing window.
@@ -60,11 +72,12 @@ function startServer() {
   // (outside the asar archive, so Node can actually require/serve them).
   // In dev mode they sit next to main.js.
   const serverPath = path.join(PROJECT_ROOT, 'server.js');
+  try { logFd = require('fs').openSync(LOG_FILE, 'a'); } catch { logFd = null; }
   const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT) };
   serverProcess = spawn(process.execPath, [serverPath], {
     env,
     cwd: PROJECT_ROOT,
-    stdio: 'inherit',
+    stdio: logFd ? ['ignore', logFd, logFd] : 'ignore',
   });
   serverProcess.on('exit', (code) => {
     serverProcess = null;
@@ -75,7 +88,7 @@ function startServer() {
   });
 }
 
-function waitForServer(retries = 40) {
+function waitForServer(retries = 120) {
   return new Promise((resolve, reject) => {
     const attempt = (left) => {
       const req = http.get(`${BASE_URL}/`, (res) => {
@@ -91,7 +104,17 @@ function waitForServer(retries = 40) {
   });
 }
 
-function createWindow() {
+function errorPageHtml() {
+  return `<html><body style="font-family:Segoe UI,sans-serif;background:#16130f;color:#f0e6d2;padding:40px;line-height:1.6">
+    <h2>Server nicht erreichbar / Server not reachable</h2>
+    <p>Die lokale Server-Komponente konnte nicht gestartet werden.</p>
+    <p>Log-Datei: <code>${LOG_FILE}</code></p>
+    <p>Mögliche Ursachen: Antivirus blockiert die App, oder ein anderes Programm belegt den Port.</p>
+    <button onclick="location.reload()" style="padding:8px 16px;margin-top:12px">Erneut versuchen / Retry</button>
+    </body></html>`;
+}
+
+function createWindow(serverUp = true) {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -120,7 +143,22 @@ function createWindow() {
   });
 
   Menu.setApplicationMenu(null);
-  mainWindow.loadURL(BASE_URL);
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    if (url !== BASE_URL) return; // sub-resources can fail harmlessly
+    const html = `<html><body style="font-family:sans-serif;background:#16130f;color:#f0e6d2;padding:40px">
+      <h2>Server not reachable</h2>
+      <p>The app could not start its local server.</p>
+      <p>Error ${code}: ${desc}</p>
+      <p>Check the log file: <code>${LOG_FILE}</code></p>
+      <button onclick="location.reload()" style="padding:8px 16px;margin-top:12px">Retry</button>
+      </body></html>`;
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  });
+  if (serverUp) {
+    mainWindow.loadURL(BASE_URL);
+  } else {
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errorPageHtml()));
+  }
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -133,12 +171,14 @@ app.whenReady().then(async () => {
   PORT = await pickPort();
   BASE_URL = `http://127.0.0.1:${PORT}`;
   startServer();
+  let serverUp = false;
   try {
     await waitForServer();
+    serverUp = true;
   } catch (error) {
-    // Show the window anyway; the page displays a readable error.
+    // Show the window anyway — createWindow renders a readable error page.
   }
-  createWindow();
+  createWindow(serverUp);
 });
 
 app.on('window-all-closed', () => {
