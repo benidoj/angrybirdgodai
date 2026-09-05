@@ -38,7 +38,7 @@
   const NOTE_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4h9l4 4v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1 1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 4v4h4M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const REGENERATE_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M20 5v6h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const WAVE_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10v4M8 6.5v11M12 4v16M16 6.5v11M20 10v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-  const WAKE_PATTERN = /(?:^|\bhey\s+|\bok(?:ay)?[\s,]*)\s*great[\s-]*(?:sage|change|stage|page|save|cage|rage|safe)\b/i;
+  const WAKE_PATTERN = /(?:^|\bhey\s+|\bok(?:ay)?[\s,]*)\s*great[\s-]*(?:sage|change|stage|page|save|cage|rage|safe|say|sade|sayge)\b/i;
   const WAKE_SILENCE_MS = 4000;
   const NOTE_REQUEST_PATTERN = new RegExp(
     '\\b(?:make|take|write|create|add|save|jot|draft|record)\\b[\\w\\s,]{0,40}?\\b(?:note|notes)\\b'
@@ -295,7 +295,6 @@
     speakingMessage: null,
     speakingUtterance: null,
     speechActive: false,
-    speechStuckFallback: false,
     voiceRecognition: null,
     voiceListening: false,
     voiceStopRequested: false,
@@ -2923,8 +2922,19 @@
   // ---------- “Great Sage” wake word ----------
 
   function toggleWakeMode() {
-    if (state.wakeMode) disableWakeMode();
-    else enableWakeMode();
+    if (state.wakeMode) {
+      disableWakeMode();
+      return;
+    }
+    if (state.speechActive || state.speakingMessage) {
+      // Stop current speech, clear stuck flags, then listen
+      stopSpeech(false);
+      window.setTimeout(() => {
+        if (!state.wakeMode && !state.busy) enableWakeMode();
+      }, 250);
+      return;
+    }
+    enableWakeMode();
   }
 
   function enableWakeMode({ autoStart = false } = {}) {
@@ -2998,14 +3008,18 @@
 
   function startWakeListening(autoStart = false) {
     if (!state.wakeMode || state.busy || state.wakeListening) return;
-    if (state.speakingMessage || state.speechActive) {
+    const synthNow = typeof window.speechSynthesis !== 'undefined' ? window.speechSynthesis : null;
+    const playingAudio = Boolean(kokoroAudio && !kokoroAudio.paused && !kokoroAudio.ended);
+    if (state.speakingMessage || playingAudio) {
       scheduleWakeRestart();
       return;
     }
-    const synthNow = typeof window.speechSynthesis !== 'undefined' ? window.speechSynthesis : null;
-    if (synthNow && synthNow.speaking) {
-      // Browser flag stuck true while nothing of ours is playing — clear it and proceed
-      try { synthNow.cancel(); } catch (e) { /* ignore */ }
+    // Our own flags say silence — if the browser (or a lost end-event) disagrees,
+    // force-stop all audio and proceed. Listening must never be permanently blocked.
+    if (state.speechActive || (synthNow && (synthNow.speaking || synthNow.pending))) {
+      state.speechActive = false;
+      try { if (synthNow) synthNow.cancel(); } catch (e) { /* ignore */ }
+      if (kokoroAudio) { try { kokoroAudio.pause(); } catch (e) { /* ignore */ } }
     }
     const Recognition = getSpeechRecognitionConstructor();
     if (!Recognition) {
@@ -3093,25 +3107,9 @@
     window.clearTimeout(state.wakeRestartTimer);
     state.wakeRestartTimer = window.setTimeout(() => {
       if (!state.wakeMode || state.busy || state.wakeWoken || state.wakeListening) return;
-      if (state.speakingMessage || state.speechActive) {
-        scheduleWakeRestart();
-        return;
-      }
-      // Chrome can leave speechSynthesis.speaking stuck true after cancel();
-      // trust speechActive instead, recover once, then force a restart.
-      const synth = typeof window.speechSynthesis !== 'undefined' ? window.speechSynthesis : null;
-      if (synth && synth.speaking && !state.speechStuckFallback) {
-        state.speechStuckFallback = true;
-        try { synth.cancel(); } catch (e) { /* ignore */ }
-        window.setTimeout(() => {
-          state.speechStuckFallback = false;
-          if (state.wakeMode && !state.wakeListening && !state.busy && !state.speakingMessage && !state.speechActive) {
-            startWakeListening();
-          }
-        }, 1200);
-        return;
-      }
       startWakeListening();
+      // startWakeListening force-clears stale speech flags itself, so one pass is enough
+      if (!state.wakeListening) scheduleWakeRestart();
     }, 350);
   }
 
