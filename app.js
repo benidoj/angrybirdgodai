@@ -294,6 +294,8 @@
     stopRequested: false,
     speakingMessage: null,
     speakingUtterance: null,
+    speechActive: false,
+    speechStuckFallback: false,
     voiceRecognition: null,
     voiceListening: false,
     voiceStopRequested: false,
@@ -2996,9 +2998,14 @@
 
   function startWakeListening(autoStart = false) {
     if (!state.wakeMode || state.busy || state.wakeListening) return;
-    if (state.speakingMessage || (typeof window.speechSynthesis !== 'undefined' && window.speechSynthesis.speaking)) {
+    if (state.speakingMessage || state.speechActive) {
       scheduleWakeRestart();
       return;
+    }
+    const synthNow = typeof window.speechSynthesis !== 'undefined' ? window.speechSynthesis : null;
+    if (synthNow && synthNow.speaking) {
+      // Browser flag stuck true while nothing of ours is playing — clear it and proceed
+      try { synthNow.cancel(); } catch (e) { /* ignore */ }
     }
     const Recognition = getSpeechRecognitionConstructor();
     if (!Recognition) {
@@ -3086,8 +3093,22 @@
     window.clearTimeout(state.wakeRestartTimer);
     state.wakeRestartTimer = window.setTimeout(() => {
       if (!state.wakeMode || state.busy || state.wakeWoken || state.wakeListening) return;
-      if (state.speakingMessage || (typeof window.speechSynthesis !== 'undefined' && window.speechSynthesis.speaking)) {
+      if (state.speakingMessage || state.speechActive) {
         scheduleWakeRestart();
+        return;
+      }
+      // Chrome can leave speechSynthesis.speaking stuck true after cancel();
+      // trust speechActive instead, recover once, then force a restart.
+      const synth = typeof window.speechSynthesis !== 'undefined' ? window.speechSynthesis : null;
+      if (synth && synth.speaking && !state.speechStuckFallback) {
+        state.speechStuckFallback = true;
+        try { synth.cancel(); } catch (e) { /* ignore */ }
+        window.setTimeout(() => {
+          state.speechStuckFallback = false;
+          if (state.wakeMode && !state.wakeListening && !state.busy && !state.speakingMessage && !state.speechActive) {
+            startWakeListening();
+          }
+        }, 1200);
         return;
       }
       startWakeListening();
@@ -3473,6 +3494,7 @@
       audio.onended = () => {
         URL.revokeObjectURL(url);
         kokoroAudio = null;
+        state.speechActive = false;
         stopSageLipSync();
         hideGreatSageAvatar();
         if (onEnd) onEnd();
@@ -3480,12 +3502,14 @@
       audio.onerror = () => {
         URL.revokeObjectURL(url);
         kokoroAudio = null;
+        state.speechActive = false;
         stopSageLipSync();
         hideGreatSageAvatar();
         showToast('Could not play Fish Audio response.');
         if (onEnd) window.setTimeout(onEnd, 300);
       };
       await audio.play();
+      state.speechActive = true;
       showGreatSageAvatar('speaking');
       startSageLipSync(audio);
       const scheduleSageBubble = () => startSageBubble(text, audio.duration);
@@ -3530,6 +3554,7 @@
       audio.onended = () => {
         URL.revokeObjectURL(url);
         kokoroAudio = null;
+        state.speechActive = false;
         stopSageLipSync();
         hideGreatSageAvatar();
         if (onEnd) onEnd();
@@ -3537,12 +3562,14 @@
       audio.onerror = () => {
         URL.revokeObjectURL(url);
         kokoroAudio = null;
+        state.speechActive = false;
         stopSageLipSync();
         hideGreatSageAvatar();
         showToast('Could not play Kokoro audio.');
         if (onEnd) window.setTimeout(onEnd, 300);
       };
       await audio.play();
+      state.speechActive = true;
       showGreatSageAvatar('speaking');
       startSageLipSync(audio);
       const scheduleSageBubble = () => startSageBubble(text, audio.duration);
@@ -3579,9 +3606,10 @@
     }
     stopSpeech(false);
     const utterance = createSpeechUtterance(text);
-    const finish = () => { if (onEnd) onEnd(); };
+    const finish = () => { state.speechActive = false; if (onEnd) onEnd(); };
     utterance.onend = finish;
     utterance.onerror = finish;
+    state.speechActive = true;
     window.speechSynthesis.speak(utterance);
   }
 
@@ -3640,6 +3668,7 @@
       if (state.speakingUtterance !== utterance) return;
       state.speakingMessage = null;
       state.speakingUtterance = null;
+      state.speechActive = false;
       renderMessages();
     };
     utterance.onend = finish;
@@ -3649,11 +3678,13 @@
     };
     state.speakingMessage = message;
     state.speakingUtterance = utterance;
+    state.speechActive = true;
     renderMessages();
     window.speechSynthesis.speak(utterance);
   }
 
   function stopSpeech(render = true) {
+    state.speechActive = false;
     if (isSpeechSupported()) window.speechSynthesis.cancel();
     kokoroStop();
     const wasSpeaking = Boolean(state.speakingMessage);
