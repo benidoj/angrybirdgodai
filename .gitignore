@@ -20,6 +20,7 @@ desktop/app.js
 desktop/styles.css
 desktop/index.html
 
-# Bundled speech-to-text engines (fetched by `npm run fetch:whisper` / `npm run fetch:vosk`)
+# Bundled speech-to-text engines (fetched by `npm run fetch:whisper` / `npm run fetch:vosk` / `npm run fetch:vosk-runtime`)
 desktop/whisper/
 desktop/vosk/
+desktop/vosk-runtime/

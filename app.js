@@ -38,8 +38,11 @@
   const NOTE_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 4h9l4 4v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1 1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 4v4h4M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const REGENERATE_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5.3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M20 5v6h-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const WAVE_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10v4M8 6.5v11M12 4v16M16 6.5v11M20 10v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-  const WAKE_PATTERN = /(?:^|\bhey\s+|\bok(?:ay)?[\s,]*)\s*great[\s-]*(?:sage|change|stage|page|save|cage|rage|safe|say|sade|sayge)\b/i;
-  const WAKE_SILENCE_MS = 4000;
+  // “Great Sage” is an English name, so speech models transliterate it
+  // wildly (“Créite saughe”, “kreis sage”, “great change”…). Match on phonetic
+  // variant sets: one token from each part, a few words apart.
+  const WAKE_PATTERN = /(?:^|\bhey\s+|\bok(?:ay)?[\s,]*)\s*\b(?:great|greats|grate|greit|grets|grait|gräit|greets|grace|greice|gris|grey|gray|krey|krait|kreit|kreis|kreits|krets|kriets|kritz|kraets|crite|criete|créite|creite|creit|credit|kredit|krätze|kraetze)\b[\s\S]{0,40}?\b(?:sage|seidsch|saidsch|sedsch|zedsch|saughe|sauge|säuge|säughe|sahge|sadge|sayge|saidge|seidse|saitch|seitch|satch|seich|seids|zage|sedge|seghe|change|stage|page|safe|save|say|sade|cage|rage)\b/i;
+  const WAKE_SILENCE_MS = 5000;  // how long the mic keeps listening for the command after “Great Sage”
   const NOTE_REQUEST_PATTERN = new RegExp(
     '\\b(?:make|take|write|create|add|save|jot|draft|record)\\b[\\w\\s,]{0,40}?\\b(?:note|notes)\\b'
     + '|\\b(?:notier(?:e)?|schreib(?:e)?|mach(?:e)?|erstell(?:e)?|speicher(?:e)?|leg(?:e)?)\\b[\\w\\s,]{0,40}?\\b(?:notiz|notizen)\\b'
@@ -200,6 +203,8 @@
     voiceStatus: document.getElementById('voiceStatus'),
     wakeButton: document.getElementById('wakeButton'),
     wakeStatus: document.getElementById('wakeStatus'),
+    wakeTestButton: document.getElementById('wakeTestButton'),
+    wakeTestOutput: document.getElementById('wakeTestOutput'),
     connectionPill: document.getElementById('connectionPill'),
     connectionText: document.getElementById('connectionText'),
     settingsModal: document.getElementById('settingsModal'),
@@ -228,6 +233,8 @@
     speechVolumeValue: document.getElementById('speechVolumeValue'),
     ttsBackendInput: document.getElementById('ttsBackendInput'),
     ttsBackendValue: document.getElementById('ttsBackendValue'),
+    sttLangInput: document.getElementById('sttLangInput'),
+    sttBackendInput: document.getElementById('sttBackendInput'),
     greatSageAvatar: document.getElementById('greatSageAvatar'),
     greatSageBubble: document.getElementById('greatSageBubble'),
     kokoroEndpointInput: document.getElementById('kokoroEndpointInput'),
@@ -304,6 +311,10 @@
     voiceFallbackReady: false,
     voiceFallbackError: false,
     serverSttModel: null,
+    sttLang: 'auto',  // auto | en | de — voice input + wake word language
+    sttBackendPref: 'auto', // auto | vosk | whisper — recognition engine for server STT
+    serverSttBackend: null, // active engine reported by the server ('vosk' | 'whisper')
+    sttBackends: null,      // { vosk: {available,model,reason}, whisper: {...} } from server
     serverSttToken: 0,
     serverWakeActive: false,
     serverWakeToken: 0,
@@ -322,6 +333,8 @@
 
   let toastTimer = null;
   let serverCapture = null;  // active server-side voice input capture
+  let wakeTestRunning = false;  // wake-word test mode in progress
+  let wakeMicRetries = 0;  // consecutive transient mic failures while wake listening
 
   function speechTargetForVoice() {
     if (getSpeechRecognitionConstructor()) return { backend: 'browser' };
@@ -329,18 +342,53 @@
     return { backend: 'none' };
   }
 
+  // Map the voice-language setting to a BCP-47 recognition locale.
+  function sttRecognitionLang() {
+    if (state.sttLang === 'de') return 'de-DE';
+    if (state.sttLang === 'en') return 'en-US';
+    return window.navigator.language || 'en-US';
+  }
+
+  function backendDisplayName(backend) {
+    if (backend === 'vosk') return 'Vosk';
+    if (backend === 'whisper') return 'whisper.cpp';
+    return 'server';
+  }
+
+  // Human text for the "Speech model" row: active engine + model, or why nothing runs.
+  function serverSttStatusText() {
+    if (state.voiceFallbackReady) {
+      return 'Connected — ' + backendDisplayName(state.serverSttBackend)
+        + (state.serverSttModel ? ' (' + state.serverSttModel + ')' : '');
+    }
+    if (isVoiceInputSupported()) return 'Browser voice available — server model not needed';
+    const vosk = state.sttBackends && state.sttBackends.vosk;
+    const whisper = state.sttBackends && state.sttBackends.whisper;
+    const pref = state.sttBackendPref;
+    if (pref === 'vosk' && whisper && whisper.available) return 'Vosk not available — whisper.cpp is ready (choose Auto or whisper.cpp)';
+    if (pref === 'whisper' && vosk && vosk.available) return 'whisper.cpp not available — Vosk is ready (choose Auto or Vosk)';
+    if (pref === 'vosk') return 'Vosk not available' + (vosk && vosk.reason ? ' — ' + vosk.reason : '');
+    if (pref === 'whisper') return 'whisper.cpp not available' + (whisper && whisper.reason ? ' — ' + whisper.reason : '');
+    if (vosk && vosk.available) return 'Not connected — pick an engine above';
+    if (whisper && whisper.available) return 'Not connected — pick an engine above';
+    return 'No speech engine — install Vosk (pip install vosk) or restore the whisper folder';
+  }
+
   async function probeServerStt() {
     try {
-      const response = await fetch('/api/stt', { method: 'GET' });
+      const response = await fetch('/api/stt?lang=' + encodeURIComponent(state.sttLang || 'auto') + '&backend=' + encodeURIComponent(state.sttBackendPref || 'auto'), { method: 'GET' });
       const data = await response.json().catch(() => ({}));
       const ready = Boolean(data && data.available);
       state.voiceFallbackReady = ready;
       state.serverSttModel = ready && data.model ? data.model : null;
+      state.serverSttBackend = data.backend || null;
+      if (data && data.backends) state.sttBackends = data.backends;
       updateSpeechControls();
       updateVoiceUI();
       return ready;
     } catch (error) {
       state.voiceFallbackReady = false;
+      state.serverSttBackend = null;
       updateSpeechControls();
       updateVoiceUI();
       return false;
@@ -443,6 +491,8 @@
       if (Number.isFinite(Number(saved.speechVolume))) state.speechVolume = clamp(Number(saved.speechVolume), 0.1, 1);
       if (typeof saved.speechPreset === 'string') state.speechPreset = saved.speechPreset;
       if (typeof saved.ttsBackend === 'string' && ['browser', 'kokoro', 'fish'].includes(saved.ttsBackend)) state.ttsBackend = saved.ttsBackend;
+      if (typeof saved.sttLang === 'string' && ['auto', 'en', 'de'].includes(saved.sttLang)) state.sttLang = saved.sttLang;
+      if (typeof saved.sttBackendPref === 'string' && ['auto', 'vosk', 'whisper'].includes(saved.sttBackendPref)) state.sttBackendPref = saved.sttBackendPref;
       // If the saved state predates Fish Audio (browser/kokoro) but the built-in key is present, default to Fish.
       if (state.ttsBackend === 'browser' && state.fishApiKey && state.fishReferenceId) state.ttsBackend = 'fish';
       if (typeof saved.kokoroEndpoint === 'string') state.kokoroEndpoint = saved.kokoroEndpoint;
@@ -506,6 +556,8 @@
         speechVolume: state.speechVolume,
         speechPreset: state.speechPreset,
         ttsBackend: state.ttsBackend,
+        sttLang: state.sttLang,
+        sttBackendPref: state.sttBackendPref,
         kokoroEndpoint: state.kokoroEndpoint,
         kokoroVoice: state.kokoroVoice,
         fishApiKey: state.fishApiKey,
@@ -679,6 +731,37 @@
     elements.diagnosticsCloseButton.addEventListener('click', closeDiagnostics);
     elements.saveSettingsButton.addEventListener('click', saveSettings);
 
+    const sttLangInput = document.getElementById('sttLangInput');
+    if (sttLangInput) sttLangInput.addEventListener('change', () => {
+      state.sttLang = ['auto', 'en', 'de'].includes(sttLangInput.value) ? sttLangInput.value : 'auto';
+      saveState();
+      probeServerStt();
+      setVoiceStatus(state.sttLang === 'de' ? 'Spracherkennung: Deutsch — Great Sage hört auf “kreis sage”.' : 'Voice language updated.', 'success');
+    });
+
+    const sttBackendInput = document.getElementById('sttBackendInput');
+    if (sttBackendInput) sttBackendInput.addEventListener('change', () => {
+      const next = ['auto', 'vosk', 'whisper'].includes(sttBackendInput.value) ? sttBackendInput.value : 'auto';
+      if (next === state.sttBackendPref) return;
+      state.sttBackendPref = next;
+      saveState();
+      const statusEl = document.getElementById('voiceFallbackStatus');
+      if (statusEl) statusEl.textContent = 'Switching…';
+      const label = next === 'vosk' ? 'Vosk' : (next === 'whisper' ? 'whisper.cpp' : 'auto (Vosk preferred)');
+      probeServerStt().then((ready) => {
+        if (statusEl) statusEl.textContent = serverSttStatusText();
+        setVoiceStatus(ready
+          ? 'Speech engine switched to ' + label + '.'
+          : (next === 'vosk'
+            ? 'Vosk is not available on this machine — switch to Auto or whisper.cpp.'
+            : (next === 'whisper' ? 'whisper.cpp is not available — switch to Auto or Vosk.' : 'No server speech engine available.')),
+          ready ? 'success' : 'error');
+      });
+    });
+
+    const wakeTestBtn = document.getElementById('wakeTestButton');
+    if (wakeTestBtn) wakeTestBtn.addEventListener('click', runWakeTest);
+
     const vfbButton = document.getElementById('voiceFallbackStatusButton');
     if (vfbButton) vfbButton.addEventListener('click', () => {
       const statusEl = document.getElementById('voiceFallbackStatus');
@@ -692,8 +775,8 @@
       }
       statusEl.textContent = 'Checking…';
       probeServerStt().then((ready) => {
-        statusEl.textContent = ready ? (state.serverSttModel ? `Connected (${state.serverSttModel})` : 'Connected') : 'Not set up';
-        setVoiceStatus(ready ? 'Server speech model is connected (whisper.cpp).' : 'Server speech model is not set up. See Settings for setup instructions.', ready ? 'success' : 'error');
+        statusEl.textContent = serverSttStatusText();
+        setVoiceStatus(ready ? 'Server speech engine connected (' + backendDisplayName(state.serverSttBackend) + ').' : 'Server speech model is not set up. See Settings for setup instructions.', ready ? 'success' : 'error');
       }).catch(() => {
         statusEl.textContent = 'Unreachable';
         setVoiceStatus('Server speech model check failed. Start the app and try again.', 'error');
@@ -3024,8 +3107,10 @@
     return new Blob([buffer], { type: 'audio/wav' });
   }
 
-  async function transcribeServerAudio(wavBlob, token) {
-    const response = await fetch('/api/stt', {
+  async function transcribeServerAudio(wavBlob, token, overrides) {
+    const lang = (overrides && overrides.lang) || state.sttLang || 'auto';
+    const backend = (overrides && overrides.backend) || state.sttBackendPref || 'auto';
+    const response = await fetch('/api/stt?lang=' + encodeURIComponent(lang) + '&backend=' + encodeURIComponent(backend), {
       method: 'POST',
       headers: { 'Content-Type': 'audio/wav' },
       body: wavBlob,
@@ -3051,7 +3136,7 @@
   }
     state.voiceBaseText = elements.messageInput.value.trim();
     state.voiceTranscript = '';
-    recognition.lang = window.navigator.language || 'en-US';
+    recognition.lang = sttRecognitionLang();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -3309,7 +3394,7 @@
     }
     state.wakeRecognition = recognition;
     state.wakeListening = true;
-    recognition.lang = window.navigator.language || 'en-US';
+    recognition.lang = sttRecognitionLang();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -3417,13 +3502,19 @@
     const wakeLoopToken = ++state.serverWakeToken;
     navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       .then((stream) => {
+        wakeMicRetries = 0;
         const capture = createServerCapture(stream);
         window.setTimeout(() => {
           const wavBlob = encodePcmToWav(capture.stop(), capture.sampleRate);
           if (!state.wakeServerActive || !state.wakeMode || state.serverWakeToken !== wakeLoopToken) return;
           if (!wavBlob) { scheduleServerWakeRestart(); return; }
           setWakeStatus("Listening for 'Great Sage'…", 'listening');
-          transcribeServerAudio(wavBlob, wakeLoopToken)
+          // Wake detection runs on whisper(auto)+English Vosk for mixed accents;
+          // once woken, the command itself is heard with the user's language model.
+          const wakePromise = state.wakeWoken
+            ? transcribeServerAudio(wavBlob, wakeLoopToken)
+            : transcribeWakeChunk(wavBlob, wakeLoopToken);
+          wakePromise
             .then((text) => {
               if (state.serverWakeToken !== wakeLoopToken) return;
               if (text) handleWakeTranscript(text);
@@ -3433,24 +3524,198 @@
               if (state.serverWakeToken !== wakeLoopToken) return;
               if (state.wakeMode) scheduleServerWakeRestart(error);
             });
-        }, 3000);
+        }, 5000);
       })
-      .catch(() => {
+      .catch((error) => {
         if (state.serverWakeToken !== wakeLoopToken) return;
-        if (state.wakeMode) {
-          setWakeStatus('Microphone unavailable — wake word paused.', 'error');
-          pauseWakeListening();
-          updateWakeUI();
-          updateVoiceUI();
+        if (!state.wakeMode) return;
+        const name = error && error.name;
+        const transient = name === 'NotReadableError' || name === 'AbortError' || name === 'TrackStartError';
+        const denied = name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError';
+        const missing = name === 'NotFoundError' || name === 'DevicesNotFoundError';
+        let message = 'Microphone unavailable — wake word paused.';
+        if (denied) {
+          message = 'Microphone permission is off — wake word paused. Allow the mic (Windows: Settings → Privacy → Microphone) and click the wave button once.';
+        } else if (missing) {
+          message = 'No microphone found — wake word paused. Connect one, then press the wave button.';
+        } else if (transient) {
+          message = 'Microphone is busy (another app or window may be using it) — retrying…';
+        }
+        setWakeStatus(message, 'error');
+        pauseWakeListening();
+        updateWakeUI();
+        updateVoiceUI();
+        if (transient && wakeMicRetries < 6) {
+          wakeMicRetries += 1;
+          window.setTimeout(() => {
+            if (state.wakeMode && !state.wakeWoken && !state.wakeListening) {
+              setWakeStatus("Listening for 'Great Sage'…", 'listening');
+              startServerWakeLoop();
+            }
+          }, 3000);
         }
       });
+  }
+
+  // Canonicalizes any heard variant of the wake name to “Great Sage”
+  // (returns '' when the transcript contains no wake phrase).
+  function normalizeWakeText(raw) {
+    const input = String(raw || '').trim();
+    if (!input) return '';
+    const text = input.replace(WAKE_PATTERN, 'Great Sage');
+    return /\bGreat Sage\b/i.test(text) ? text : '';
+  }
+
+  // Listens for the wake name. “Great Sage” is English, so when the UI language
+  // is German/Auto a German-only model mangles it (“ich sage…”) while English
+  // Vosk mangles German commands. Whisper’s automatic language detection hears
+  // mixed speech best (“Créite saughe öffne den Taschenrechner”), so wake chunks
+  // are checked against whisper(-auto) plus the fast English model in parallel.
+  // Engines used to listen for the wake name. German/Auto listens bilingually:
+  // whisper(auto) understands the English name across accents, English Vosk is
+  // the fast native-English catch.
+  function wakeEnginePlans() {
+    const lang = state.sttLang || 'auto';
+    const pref = state.sttBackendPref || 'auto';
+    if (lang === 'de' || lang === 'auto') {
+      return [
+        { label: 'whisper (auto)', lang: 'auto', backend: 'whisper' },
+        { label: 'Vosk (English)', lang: 'en', backend: 'vosk' },
+      ];
+    }
+    const backend = pref === 'whisper' ? 'whisper' : 'vosk';
+    return [{ label: backend === 'whisper' ? 'whisper (en)' : 'Vosk (en)', lang: 'en', backend }];
+  }
+
+  async function transcribeWakeChunk(wavBlob, token) {
+    const lang = state.sttLang || 'auto';
+    if (lang !== 'de' && lang !== 'auto') {
+      // English listener — the configured engine hears “Great Sage” clearly.
+      const text = await transcribeServerAudio(wavBlob, token);
+      return normalizeWakeText(text);
+    }
+    const plans = wakeEnginePlans();
+    const results = await Promise.allSettled(
+      plans.map((plan) => transcribeServerAudio(wavBlob, token, plan))
+    );
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const text = normalizeWakeText(result.value);
+        if (text) return text;
+      }
+    }
+    // Engine missing or both failed — try whatever the user configured.
+    try {
+      return normalizeWakeText(await transcribeServerAudio(wavBlob, token));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // ---- Wake-word test mode: record 5 s and show what the engine heard -------
+  async function runWakeTest() {
+    const btn = elements.wakeTestButton;
+    const out = elements.wakeTestOutput;
+    if (!out || wakeTestRunning) return;
+    wakeTestRunning = true;
+    if (btn) btn.disabled = true;
+    const wasWake = state.wakeMode;
+    if (wasWake) pauseWakeListening();
+    const say = (message) => { out.textContent = message; out.classList.remove('wake-test-hit'); };
+    const finish = (lines, hit) => {
+      out.textContent = lines.join('\n');
+      out.classList.toggle('wake-test-hit', Boolean(hit));
+      if (btn) btn.disabled = false;
+      wakeTestRunning = false;
+      if (wasWake && state.wakeMode) scheduleWakeRestart();
+    };
+
+    // Server engines (desktop / wake fallback): record, then transcribe.
+    if (state.voiceFallbackReady) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const capture = createServerCapture(stream);
+        say('Listening — say “Great Sage …” now (5 seconds)…');
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        const wavBlob = encodePcmToWav(capture.stop(), capture.sampleRate);
+        if (!wavBlob) {
+          finish(['No audio captured — is the microphone working?']);
+          return;
+        }
+        say('Transcribing with the wake engines…');
+        const plans = wakeEnginePlans();
+        const token = state.serverSttToken;
+        const results = await Promise.allSettled(
+          plans.map((plan) => transcribeServerAudio(wavBlob, token, plan))
+        );
+        const lines = [];
+        let matched = '';
+        plans.forEach((plan, index) => {
+          const result = results[index];
+          const raw = result.status === 'fulfilled' ? String(result.value || '').trim() : '(engine unavailable)';
+          lines.push(`${plan.label}: “${raw || '(no speech detected)'}”`);
+          if (!matched && raw) matched = normalizeWakeText(raw);
+        });
+        if (matched) {
+          lines.push('');
+          lines.push(`✅ Wake word heard → ${matched}`);
+          lines.push('The command after “Great Sage” would be executed.');
+          finish(lines, true);
+        } else {
+          lines.push('');
+          lines.push('✗ No wake phrase heard in any engine.');
+          lines.push('Say “Great Sage” with clear English pronunciation — “ich sage …” is deliberately ignored.');
+          finish(lines, false);
+        }
+        return;
+      } catch (error) {
+        finish([error && error.name === 'NotAllowedError'
+          ? 'Microphone access denied — allow the mic and try again.'
+          : 'Could not access the microphone: ' + (error && error.message ? error.message : error)]);
+        return;
+      }
+    }
+
+    // Browser speech path (Chrome/Edge): listen live via SpeechRecognition.
+    const Recognition = getSpeechRecognitionConstructor();
+    if (!Recognition) {
+      finish(['No speech engine is available for the test.']);
+      return;
+    }
+    try {
+      const recognition = new Recognition();
+      let heard = '';
+      recognition.lang = sttRecognitionLang();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.onresult = (event) => {
+        for (let index = 0; index < event.results.length; index += 1) {
+          heard += ` ${event.results[index][0]?.transcript || ''}`;
+        }
+      };
+      recognition.onerror = () => {};
+      recognition.start();
+      say('Listening — say “Great Sage …” now (5 seconds)…');
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      try { recognition.stop(); } catch (e) { /* ignore */ }
+      const raw = heard.trim();
+      const matched = normalizeWakeText(raw);
+      if (matched) {
+        finish([`Browser voice heard: “${raw}”`, '', `✅ Wake word heard → ${matched}`], true);
+      } else {
+        finish([`Browser voice heard: “${raw || '(nothing)'}”`, '', '✗ No wake phrase recognized — try clearer English pronunciation.']);
+      }
+    } catch (error) {
+      finish(['Browser voice test failed: ' + (error && error.message ? error.message : error)]);
+    }
   }
 
   function handleWakeTranscript(transcript) {
     const raw = String(transcript || '').trim();
     if (!raw) return;
     // Normalize speech-recognition mishearings of \"Great Sage\" back to the correct phrase
-    const text = raw.replace(WAKE_PATTERN, 'Great Sage');
+    const text = normalizeWakeText(raw) || raw;
     const match = text.match(/\bGreat Sage\b/i);
     if (!state.wakeWoken) {
       if (!match) return;
@@ -4091,6 +4356,8 @@
     state.speechVoice = best.score > 0 ? best.voice.voiceURI : '';
 
     elements.ttsBackendInput.value = state.ttsBackend;
+    if (elements.sttLangInput) elements.sttLangInput.value = state.sttLang;
+    if (elements.sttBackendInput) elements.sttBackendInput.value = state.sttBackendPref;
     elements.kokoroVoiceInput.value = state.kokoroVoice;
     elements.kokoroEndpointInput.value = state.kokoroEndpoint;
     elements.speechVoiceInput.value = state.speechVoice;
@@ -4478,11 +4745,7 @@
       fallbackRowEl.hidden = !state.voiceFallbackReady && isVoiceInputSupported();
       const fbStatus = document.getElementById('voiceFallbackStatus');
       if (fbStatus) {
-        fbStatus.textContent = state.voiceFallbackReady
-          ? (state.serverSttModel ? `Connected (${state.serverSttModel})` : 'Connected')
-          : (!isVoiceInputSupported()
-            ? 'Not connected — browser voice unavailable and no server speech model'
-            : 'Browser voice available — server model not needed');
+        fbStatus.textContent = serverSttStatusText();
       }
     }
     elements.speechRateInput.value = String(state.speechRate);
@@ -4504,6 +4767,8 @@
     const isFish = state.ttsBackend === 'fish';
     const isCloud = isKokoro || isFish;
     elements.ttsBackendInput.value = state.ttsBackend;
+    if (elements.sttLangInput) elements.sttLangInput.value = state.sttLang;
+    if (elements.sttBackendInput) elements.sttBackendInput.value = state.sttBackendPref;
     elements.ttsBackendValue.textContent = isFish ? 'Fish Audio' : (isKokoro ? 'Kokoro-FastAPI' : 'Browser');
     elements.kokoroEndpointInput.value = state.kokoroEndpoint;
     elements.kokoroVoiceInput.value = state.kokoroVoice;

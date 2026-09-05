@@ -78,14 +78,18 @@ function startServer() {
 --- boot ${new Date().toISOString()} port=${PORT} ---
 `);
   // Bundled speech-to-text lives next to the app resources.
-  // Packaged: <resources>/whisper + <resources>/vosk    Dev: desktop/whisper + desktop/vosk
+  // Packaged: <resources>/whisper + <resources>/vosk + <resources>/vosk-runtime
+  // Dev: desktop/whisper + desktop/vosk + desktop/vosk-runtime
   const WHISPER_DIR = isPackaged
     ? path.join(process.resourcesPath, 'whisper')
     : path.join(__dirname, 'whisper');
   const VOSK_MODEL_DIR = isPackaged
     ? path.join(process.resourcesPath, 'vosk')
     : path.join(__dirname, 'vosk');
-  const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT), ABG_DATA_DIR: LOG_DIR, ABG_WHISPER_DIR: WHISPER_DIR, ABG_VOSK_MODEL_DIR: VOSK_MODEL_DIR };
+  const VOSK_RUNTIME_DIR = isPackaged
+    ? path.join(process.resourcesPath, 'vosk-runtime')
+    : path.join(__dirname, 'vosk-runtime');
+  const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT), ABG_DATA_DIR: LOG_DIR, ABG_WHISPER_DIR: WHISPER_DIR, ABG_VOSK_MODEL_DIR: VOSK_MODEL_DIR, ABG_VOSK_RUNTIME_DIR: VOSK_RUNTIME_DIR };
   try {
     serverProcess = spawn(process.execPath, [serverPath], {
       env,

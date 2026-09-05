@@ -1230,32 +1230,53 @@ const IMAGE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif
 const FISH_AUDIO_API = 'https://api.fish.audio';
 const FISH_MAX_TEXT = 2000;
 
-// ---- Vosk (optional preferred backend; whisper.cpp is the bundled fallback) ----
-// Vosk runs through the official `vosk-transcriber` CLI (pip install vosk), so no
-// native Node binding is required. Detection is fully runtime-based: when both the
-// CLI and a model folder exist we use Vosk, otherwise we fall back to whisper.cpp.
-function findVoskModel() {
+// ---- Vosk (preferred backend; whisper.cpp stays as fallback) ----
+// Vosk runs through the official `vosk-transcriber` CLI (pip install vosk). The
+// desktop app bundles a portable Python embed with vosk preinstalled, so the CLI
+// is available on every machine without installing Python. Detection is fully
+// runtime-based: when both the CLI and a model folder exist we use Vosk,
+// otherwise we fall back to whisper.cpp.
+function findVoskModel(lang) {
+  const langToken = lang === 'de' ? 'de' : 'en';
   const candidates = [];
   if (process.env.ABG_VOSK_MODEL_DIR) candidates.push(process.env.ABG_VOSK_MODEL_DIR);
   candidates.push(path.join(ROOT, 'vosk'), path.join(ROOT, 'desktop', 'vosk'), path.join(os.homedir(), '.cache', 'vosk'));
+  const found = [];
   for (const base of candidates) {
     try {
-      const entries = fs.readdirSync(base);
-      const modelDir = entries.find((entry) => /^vosk-model-/.test(entry));
-      if (modelDir) {
-        const full = path.join(base, modelDir);
+      for (const entry of fs.readdirSync(base)) {
+        if (!/^vosk-model-/.test(entry)) continue;
+        const full = path.join(base, entry);
         try {
-          if (fs.statSync(full).isDirectory() && fs.statSync(path.join(full, 'am', 'final.mdl')).isFile()) return full;
-        } catch (error) { /* not a model */ }
+          if (!fs.statSync(full).isDirectory() || !fs.statSync(path.join(full, 'am', 'final.mdl')).isFile()) continue;
+        } catch (error) { continue; }
+        found.push({ dir: full, lang: /(^|[-_])de([-_]|$)/.test(entry) ? 'de' : (/(^|[-_])en([-_]|$)/.test(entry) ? 'en' : 'auto') });
       }
     } catch (error) { /* try next candidate */ }
   }
-  return null;
+  const wanted = found.filter((model) => model.lang === langToken);
+  return (wanted.length ? wanted[0] : found[0]) ? (wanted.length ? wanted[0] : found[0]).dir : null;
 }
 
 function findVoskTranscriber() {
   if (process.env.ABG_VOSK_TRANSCRIBER && fs.existsSync(process.env.ABG_VOSK_TRANSCRIBER)) return process.env.ABG_VOSK_TRANSCRIBER;
+  // Bundled portable Python runtime (desktop app ships this in resources).
+  // Bundled portable Python runtime (desktop app ships this in resources).
+  // Preferred: our own vosk-API runner script — it needs no ffmpeg on PATH.
+  const bundledRoot = process.env.ABG_VOSK_RUNTIME_DIR || path.join(ROOT, 'vosk-runtime');
+  const bundledDirs = [
+    bundledRoot,
+    path.join(ROOT, 'desktop', 'vosk-runtime'),
+  ];
+  for (const dir of bundledDirs) {
+    try {
+      const python = path.join(dir, 'python.exe');
+      const runner = path.join(dir, 'vosk_transcribe.py');
+      if (fs.statSync(python).isFile() && fs.statSync(runner).isFile()) return { python, runner };
+    } catch (error) { /* keep searching */ }
+  }
   const names = process.platform === 'win32' ? ['vosk-transcriber.exe', 'vosk-transcriber.cmd'] : ['vosk-transcriber'];
+  // Fall back to a system vosk-transcriber CLI (needs ffmpeg for audio decode).
   const pathDirs = (process.env.PATH || '').split(path.delimiter);
   for (const dir of pathDirs) {
     if (!dir) continue;
@@ -1284,19 +1305,62 @@ function findVoskTranscriber() {
   return null;
 }
 
-// Returns the best available speech backend, or null when none is ready.
-function pickSttBackend() {
-  const voskModel = findVoskModel();
+// Normalize a language request: en / de / auto (default).
+function normalizeSttLang(value) {
+  const raw = String(value || 'auto').trim().toLowerCase();
+  if (raw === 'de' || raw.startsWith('de-')) return 'de';
+  if (raw === 'en' || raw.startsWith('en')) return 'en';
+  return 'auto';
+}
+
+// Normalize a speech-engine request: vosk / whisper / auto (default = prefer Vosk).
+function normalizeSttBackend(value) {
+  const raw = String(value || 'auto').trim().toLowerCase();
+  if (raw === 'vosk') return 'vosk';
+  if (raw === 'whisper' || raw === 'whisper.cpp' || raw === 'whisper-cpp' || raw === 'cpp') return 'whisper';
+  return 'auto';
+}
+
+// Availability of each engine for a language, independent of user preference.
+function voskEngineInfo(lang) {
+  const langNorm = normalizeSttLang(lang);
+  const langToken = langNorm === 'de' ? 'de' : 'en';
+  const voskModel = langNorm === 'auto'
+    ? (findVoskModel('en') || findVoskModel('de'))
+    : findVoskModel(langToken);
   const voskTranscriber = findVoskTranscriber();
+  const base = { backend: 'vosk', lang: langNorm === 'auto' ? 'en' : langNorm };
   if (voskModel && voskTranscriber && !process.env.ABG_DISABLE_VOSK) {
-    return { backend: 'vosk', model: path.basename(voskModel), modelDir: voskModel, transcriber: voskTranscriber };
+    return Object.assign(base, { available: true, model: path.basename(voskModel), modelDir: voskModel, transcriber: voskTranscriber, reason: null });
   }
+  return Object.assign(base, {
+    available: false,
+    model: null,
+    reason: process.env.ABG_DISABLE_VOSK
+      ? 'disabled (ABG_DISABLE_VOSK)'
+      : (!voskTranscriber ? 'vosk-transcriber not installed (pip install vosk)' : 'no Vosk model found'),
+  });
+}
+
+function whisperEngineInfo(lang) {
+  const langNorm = normalizeSttLang(lang);
   const modelPath = findWhisperModel(WHISPER_DIR);
   const cliPath = WHISPER_DIR ? path.join(WHISPER_DIR, 'Release', 'whisper-cli.exe') : null;
+  const base = { backend: 'whisper', lang: langNorm };
   if (modelPath && cliPath && fs.existsSync(cliPath)) {
-    return { backend: 'whisper.cpp', model: path.basename(modelPath), modelPath, cliPath };
+    return Object.assign(base, { available: true, model: path.basename(modelPath), modelPath, cliPath, reason: null });
   }
-  return null;
+  return Object.assign(base, { available: false, model: null, reason: 'whisper-cli.exe or model missing' });
+}
+
+// Returns the backend that should transcribe for a language + preference, or null.
+function pickSttBackend(lang, backendPref) {
+  const pref = normalizeSttBackend(backendPref);
+  const vosk = voskEngineInfo(lang);
+  const whisper = whisperEngineInfo(lang);
+  if (pref === 'vosk') return vosk.available ? vosk : null;
+  if (pref === 'whisper') return whisper.available ? whisper : null;
+  return vosk.available ? vosk : (whisper.available ? whisper : null);
 }
 
 // ---- Speech-to-text (Vosk preferred, bundled whisper.cpp fallback) ----
@@ -1308,17 +1372,36 @@ function queueSttTask(task) {
   return run;
 }
 
-function sttStatusPayload() {
-  const backend = pickSttBackend();
+function sttBackendInfo(lang, backendPref) {
+  const backend = pickSttBackend(lang, backendPref);
   return {
     available: Boolean(backend),
     backend: backend ? backend.backend : null,
     model: backend ? backend.model : null,
+    lang: backend ? backend.lang : normalizeSttLang(lang),
+  };
+}
+
+function sttStatusPayload(lang, backendPref) {
+  const info = sttBackendInfo(lang, backendPref);
+  const vosk = voskEngineInfo(lang);
+  const whisper = whisperEngineInfo(lang);
+  return {
+    ...info,
+    preference: normalizeSttBackend(backendPref),
+    backends: {
+      vosk: { available: vosk.available, model: vosk.model, reason: vosk.reason },
+      whisper: { available: whisper.available, model: whisper.model, reason: whisper.reason },
+    },
+    languages: {
+      en: sttBackendInfo('en', backendPref),
+      de: sttBackendInfo('de', backendPref),
+    },
   };
 }
 
 // Vosk transcribes a WAV via the official CLI: -i input -o output (plain txt).
-function transcribeWithVosk(wavBuffer, transcriberPath, modelDir) {
+function transcribeWithVosk(wavBuffer, transcriber, modelDir) {
   if (wavBuffer.length < 44 || wavBuffer.slice(0, 4).toString('ascii') !== 'RIFF'
     || wavBuffer.slice(8, 12).toString('ascii') !== 'WAVE') {
     const error = new Error('Unsupported audio format — 16 kHz mono WAV expected');
@@ -1332,7 +1415,15 @@ function transcribeWithVosk(wavBuffer, transcriberPath, modelDir) {
     const cleanup = () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* ignore */ } };
     fs.writeFile(wavPath, wavBuffer, (writeError) => {
       if (writeError) { cleanup(); reject(writeError); return; }
-      const child = spawn(transcriberPath, ['-m', modelDir, '-i', wavPath, '-o', outPath, '--log-level', 'ERROR'], { windowsHide: true });
+      // transcriber may be a plain path (vosk-transcriber CLI) or, for the bundled
+      // portable Python runtime, { python, runner } — a vosk-API script that needs
+      // no ffmpeg. Both accept the same CLI surface: -m model -i in.wav -o out.txt.
+      const runner = transcriber && typeof transcriber === 'object' ? transcriber : null;
+      const argv0 = runner ? runner.python : transcriber;
+      const args = runner
+        ? [runner.runner, '-m', modelDir, '-i', wavPath, '-o', outPath, '--log-level', 'ERROR']
+        : ['-m', modelDir, '-i', wavPath, '-o', outPath, '--log-level', 'ERROR'];
+      const child = spawn(argv0, args, { windowsHide: true });
       let stderr = '';
       const timer = setTimeout(() => { try { child.kill(); } catch (e) { /* ignore */ } }, 120000);
       child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
@@ -1355,7 +1446,7 @@ function transcribeWithVosk(wavBuffer, transcriberPath, modelDir) {
   });
 }
 
-function transcribeWithWhisper(wavBuffer) {
+function transcribeWithWhisper(wavBuffer, lang) {
   const modelPath = findWhisperModel(WHISPER_DIR);
   const cliPath = WHISPER_DIR ? path.join(WHISPER_DIR, 'Release', 'whisper-cli.exe') : null;
   if (!modelPath || !cliPath || !fs.existsSync(cliPath)) {
@@ -1384,7 +1475,7 @@ function transcribeWithWhisper(wavBuffer) {
         '-f', wavPath,
         '-nt',           // no timestamps — plain text on stdout
         '-np',           // suppress progress/log noise on stderr
-        '-l', 'auto',
+        '-l', normalizeSttLang(lang),
       ], { windowsHide: true });
       let stdout = '';
       let stderr = '';
@@ -1415,14 +1506,30 @@ function transcribeWithWhisper(wavBuffer) {
 
 async function handleVoiceTranscribe(req, res) {
   res.setHeader("Cache-Control", "no-store");
-  const status = sttStatusPayload();
+  // Language + engine come from the query string (?lang=de&backend=vosk)
+  // or headers (X-Stt-Lang / X-Stt-Backend). Defaults: auto / auto.
+  let lang = 'auto';
+  let backendPref = 'auto';
+  try {
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    if (params.get('lang')) lang = normalizeSttLang(params.get('lang'));
+    else if (req.headers['x-stt-lang']) lang = normalizeSttLang(req.headers['x-stt-lang']);
+    if (params.get('backend')) backendPref = normalizeSttBackend(params.get('backend'));
+    else if (req.headers['x-stt-backend']) backendPref = normalizeSttBackend(req.headers['x-stt-backend']);
+  } catch (error) { /* fall back to auto */ }
+  const status = sttStatusPayload(lang, backendPref);
   if (req.method === 'GET' || (req.headers['content-type'] || '').includes('application/json')) {
     // Status probe (GET, or legacy POST probe from older clients).
     sendJson(res, status.available ? 200 : 503, status);
     return;
   }
   if (!status.available) {
-    sendJson(res, 503, { error: 'Speech model not available — install vosk (pip install vosk) or ensure the whisper folder is complete', ...status });
+    const reason = backendPref === 'vosk'
+      ? (status.backends.vosk.reason || 'Vosk unavailable')
+      : (backendPref === 'whisper'
+        ? (status.backends.whisper.reason || 'whisper.cpp unavailable')
+        : 'no speech engine available — install vosk (pip install vosk) or ensure the whisper folder is complete');
+    sendJson(res, 503, { error: 'Speech model not available — ' + reason, ...status });
     return;
   }
   try {
@@ -1431,10 +1538,10 @@ async function handleVoiceTranscribe(req, res) {
       sendJson(res, 400, { error: 'Empty audio upload.' });
       return;
     }
-    const backend = pickSttBackend();
+    const backend = pickSttBackend(lang, backendPref);
     const transcribe = backend && backend.backend === 'vosk'
       ? () => transcribeWithVosk(wavBuffer, backend.transcriber, backend.modelDir)
-      : () => transcribeWithWhisper(wavBuffer);
+      : () => transcribeWithWhisper(wavBuffer, lang);
     const text = await queueSttTask(transcribe);
     sendJson(res, 200, { text });
   } catch (error) {

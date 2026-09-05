@@ -528,6 +528,28 @@
             <input class="control-range" id="speechVolumeInput" type="range" min="0.1" max="1" step="0.05" value="1" />
             <div class="range-scale"><span>Quiet</span><span>Loud</span></div>
           </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="sttLangInput">Voice language</label>
+              <span class="field-note">Used for voice input and the wake word (English / Deutsch).</span>
+            </div>
+            <select class="control-select" id="sttLangInput">
+              <option value="auto">Auto</option>
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+            </select>
+          </div>
+          <div class="control-row">
+            <div class="control-label-row">
+              <label class="field-label" for="sttBackendInput">Speech backend</label>
+              <span class="field-note">Recognition engine for server voice input. Auto prefers Vosk when installed.</span>
+            </div>
+            <select class="control-select" id="sttBackendInput">
+              <option value="auto">Auto</option>
+              <option value="vosk">Vosk</option>
+              <option value="whisper">whisper.cpp</option>
+            </select>
+          </div>
           <div class="control-row voice-fallback-row hidden">
             <div class="control-label-row">
               <strong class="field-label">Speech model</strong>
@@ -549,6 +571,14 @@
             <span class="speech-toggle-track" aria-hidden="true"></span>
           </span>
         </label>
+        <div class="control-row">
+          <div class="control-label-row">
+            <strong class="field-label">Wake-word test</strong>
+            <span class="field-note">Records ~5 seconds and shows exactly what the speech engine heard — the best way to debug “Great Sage”.</span>
+          </div>
+          <button class="secondary-button" id="wakeTestButton" type="button">Test wake word</button>
+          <div class="wake-test-output" id="wakeTestOutput" aria-live="polite"></div>
+        </div>
         <small class="field-note">Tastenkürzel / Shortcut: <code>Ctrl + Shift + Space</code> startet oder stoppt das Zuhören — funktioniert in der ganzen App.</small>
         </section>
         <div class="modal-status" id="modalStatus"></div>

@@ -10,7 +10,8 @@
     "dist": "npm run sync && electron-builder --win",
     "dist:portable": "npm run sync && electron-builder --win portable",
     "fetch:whisper": "node fetch-whisper.js",
-    "fetch:vosk": "node fetch-vosk.js"
+    "fetch:vosk": "node fetch-vosk.js",
+    "fetch:vosk-runtime": "node fetch-vosk-runtime.js"
   },
   "build": {
     "appId": "com.angrybirdgodai.desktop",
@@ -46,6 +47,10 @@
       {
         "from": "vosk",
         "to": "vosk"
+      },
+      {
+        "from": "vosk-runtime",
+        "to": "vosk-runtime"
       }
     ],
     "win": {
