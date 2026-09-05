@@ -301,6 +301,8 @@
     voiceError: false,
     voiceBaseText: '',
     voiceTranscript: '',
+    voiceFallbackReady: false,
+    voiceFallbackError: false,
     wakeMode: false,
     wakeWoken: false,
     wakeListening: false,
@@ -314,8 +316,16 @@
   };
 
   let toastTimer = null;
+
+  function speechTargetForVoice() {
+    if (getSpeechRecognitionConstructor()) return { backend: 'browser' };
+    if (state.voiceFallbackReady) return { backend: 'server', url: '/api/stt' };
+    return { backend: 'none' };
+  }
+
   let connectionRequest = 0;
   let currentView = 'chat';
+  let kokoroAudio = null;  // currently playing HTMLAudioElement for Kokoro or Fish
   let wakeAckPending = false;
   let pendingToolResolve = null;
   let noteGenerationPending = false;
@@ -600,6 +610,9 @@
     elements.attachButton.addEventListener('click', () => elements.fileInput.click());
     elements.voiceButton.addEventListener('click', toggleVoiceInput);
     elements.wakeButton.addEventListener('click', toggleWakeMode);
+    elements.wakeButton.addEventListener('click', () => {
+      if (!isVoiceInputSupported()) setWakeStatus('Browser voice unavailable — server voice model is used for wake word.', 'listening');
+    });
     elements.fileInput.addEventListener('change', () => {
       handleFiles(elements.fileInput.files);
       elements.fileInput.value = '';
@@ -640,6 +653,40 @@
     });
     elements.diagnosticsCloseButton.addEventListener('click', closeDiagnostics);
     elements.saveSettingsButton.addEventListener('click', saveSettings);
+
+    const vfbButton = document.getElementById('voiceFallbackStatusButton');
+    if (vfbButton) vfbButton.addEventListener('click', () => {
+      const statusEl = document.getElementById('voiceFallbackStatus');
+      if (!statusEl) return;
+      if (isVoiceInputSupported()) {
+        statusEl.textContent = 'Browser voice available';
+        state.voiceFallbackReady = false;
+        updateSpeechControls();
+        setVoiceStatus('Browser voice is available — built-in speech recognition active.', 'success');
+        return;
+      }
+      fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ probe: true }) })
+        .then((r) => r.json().catch(() => ({})))
+        .then((data) => {
+          if (data.error && data.error.includes('not available')) {
+            statusEl.textContent = 'Not set up';
+            state.voiceFallbackReady = false;
+            updateSpeechControls();
+            setVoiceStatus('Server speech model is not set up yet. See Settings for setup instructions.', 'error');
+          } else {
+            statusEl.textContent = 'Connected';
+            state.voiceFallbackReady = true;
+            updateSpeechControls();
+            setVoiceStatus('Server speech model is connected.', 'success');
+          }
+        })
+        .catch(() => {
+          statusEl.textContent = 'Unreachable';
+          state.voiceFallbackReady = false;
+          updateSpeechControls();
+          setVoiceStatus('Server speech model check failed. Start the app and try again.', 'error');
+        });
+    });
     elements.responseStyleInput.addEventListener('change', updateGenerationPreview);
     elements.temperatureInput.addEventListener('input', updateGenerationPreview);
     elements.contextLengthInput.addEventListener('change', updateGenerationPreview);
@@ -2799,6 +2846,24 @@
 
     stopSpeech(false);
     if (state.voiceRecognition) stopVoiceInput(false);
+    // Choose path: browser recognizer (preferred) or server STT (fallback).
+    const target = speechTargetForVoice();
+    if (target.backend === 'server') {
+      state.voiceListening = true;
+      state.voiceStopRequested = false;
+      state.voiceError = false;
+      state.voiceRecognition = null;
+      setVoiceStatus('Listening on server…', 'listening');
+      updateVoiceUI();
+      stopSpeech(false);
+      startServerVoiceInput();
+      return;
+    }
+    if (target.backend === 'none') {
+      setVoiceStatus('Voice input is not available. Enable browser voice or set up a speech model on the server.', 'error');
+      updateVoiceUI();
+      return;
+    }
     let recognition;
     try {
       recognition = new Recognition();
@@ -2807,11 +2872,36 @@
       updateVoiceUI();
       return;
     }
-
     state.voiceRecognition = recognition;
     state.voiceListening = true;
     state.voiceStopRequested = false;
     state.voiceError = false;
+
+  async function startServerVoiceInput() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      state.voiceStream = stream;
+      state.voiceRecording = true;
+      setVoiceStatus('Listening on server…', 'listening');
+      updateVoiceUI();
+      window.setTimeout(() => {
+        if (state.voiceRecording) {
+          stopVoiceInput();
+          setVoiceStatus('Server voice model not connected yet — start browser voice or set up Vosk.', 'error');
+        }
+      }, 600);
+    } catch (error) {
+      state.voiceRecording = false;
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        setVoiceStatus('Microphone access denied. Allow it in your browser settings.', 'error');
+      } else if (error.name === 'NotFoundError') {
+        setVoiceStatus('No microphone found on this device.', 'error');
+      } else {
+        setVoiceStatus('Could not access the microphone. Check your browser permissions.', 'error');
+      }
+      updateVoiceUI();
+    }
+  }
     state.voiceBaseText = elements.messageInput.value.trim();
     state.voiceTranscript = '';
     recognition.lang = window.navigator.language || 'en-US';
@@ -2875,6 +2965,11 @@
     if (!recognition && !state.voiceListening) return;
     state.voiceStopRequested = true;
     state.voiceListening = false;
+    if (state.voiceStream) {
+      state.voiceStream.getTracks().forEach((t) => t.stop());
+      state.voiceStream = null;
+      state.voiceRecording = false;
+    }
     if (showStatus) {
       setVoiceStatus(state.voiceTranscript ? 'Voice input stopped. Press send when ready.' : 'Voice input stopped.', 'success');
     }
@@ -2894,6 +2989,8 @@
       'audio-capture': 'No microphone was found. Connect one and try again.',
       'no-speech': 'No speech detected. Try again.',
       network: 'Voice recognition needs Chrome or Edge and a working microphone — make sure your browser is not in offline mode and the mic is allowed.',
+      'stt-503': 'Browser voice unavailable. Speech model (Vosk/Whisper) is not set up on the server — see Settings for setup instructions.',
+      'stt-500': 'Speech server returned an error. Restart the app or check the server log.',
     };
     return messages[errorCode] || 'Voice input failed. Check your microphone and try again.';
   }
@@ -2913,7 +3010,11 @@
     elements.voiceButton.title = listening ? 'Stop voice input' : supported ? 'Speak a message' : 'Voice input needs Chrome or Edge';
 
     if (!supported && !listening) {
-      setVoiceStatus('Voice input needs Chrome or Edge.', 'error');
+      if (state.voiceFallbackReady) {
+        setVoiceStatus('Browser voice unavailable. Server voice is available — speak when ready.', 'error');
+      } else {
+        setVoiceStatus('Voice input needs Chrome or Edge and a working microphone, or a speech model on the server.', 'error');
+      }
     } else if (!state.busy && !listening && !state.wakeMode && !elements.voiceStatus.textContent) {
       setVoiceStatus('Click the mic to speak.');
     }
@@ -3250,7 +3351,7 @@
     if (!active) setWakeStatus('');
   }
 
-  let kokoroAudio = null;  // currently playing HTMLAudioElement for Kokoro or Fish
+  // kokoroAudio is declared near the top of the closure (TDZ fix)
 
   // Drag & drop state for the in-browser avatar.
   let sageDrag = null;
@@ -4140,6 +4241,18 @@
   function updateSpeechControls() {
     const isKokoro = state.ttsBackend === 'kokoro';
     const supported = isSpeechSupported();
+    const fallbackRowEl = document.querySelector('.voice-fallback-row');
+    if (fallbackRowEl) {
+      fallbackRowEl.hidden = !state.voiceFallbackReady && isVoiceInputSupported();
+      const fbStatus = document.getElementById('voiceFallbackStatus');
+      if (fbStatus) {
+        fbStatus.textContent = state.voiceFallbackReady
+          ? 'Connected'
+          : (!isVoiceInputSupported()
+            ? 'Not connected — browser voice unavailable and no server speech model'
+            : 'Browser voice available — server model not needed');
+      }
+    }
     elements.speechRateInput.value = String(state.speechRate);
     elements.speechPitchInput.value = String(state.speechPitch);
     if (elements.speechVolumeInput) elements.speechVolumeInput.value = String(state.speechVolume);

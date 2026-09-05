@@ -14,6 +14,7 @@ const OLLAMA_PORT = Number(process.env.OLLAMA_PORT || 11434);
 const MAX_RESEARCH_QUERY_LENGTH = 800;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const MAX_PODCAST_BYTES = 100 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 // Podcast audio needs a writable directory. The install folder works for
 // per-user installs, but NOT for C:\Program Files or OneDrive-synced paths —
 // so fall back to the user data dir (or temp) when the install dir is read-only.
@@ -1192,6 +1193,12 @@ const IMAGE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif
 const FISH_AUDIO_API = 'https://api.fish.audio';
 const FISH_MAX_TEXT = 2000;
 
+async function handleVoiceTranscribe(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify({ error: "Speech model not available — enable browser voice or set up Vosk/Whisper on the server" }));
+}
+
 async function handleFishTts(req, res) {
   try {
     const payload = await readJsonBody(req, 256 * 1024);
@@ -1614,6 +1621,15 @@ const server = http.createServer((req, res) => {
       return;
     }
     handlePodcastSave(req, res, requestUrl);
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/stt') {
+    if (req.method !== 'POST') {
+      sendJson(res, 405, { error: 'Method not allowed' });
+      return;
+    }
+    handleVoiceTranscribe(req, res);
     return;
   }
 
