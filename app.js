@@ -2893,7 +2893,7 @@
       'service-not-allowed': 'The browser voice service is not allowed for this page.',
       'audio-capture': 'No microphone was found. Connect one and try again.',
       'no-speech': 'No speech detected. Try again.',
-      network: 'Voice recognition needs a network connection in this browser.',
+      network: 'Voice recognition needs Chrome or Edge and a working microphone — make sure your browser is not in offline mode and the mic is allowed.',
     };
     return messages[errorCode] || 'Voice input failed. Check your microphone and try again.';
   }
