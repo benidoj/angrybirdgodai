@@ -1230,7 +1230,76 @@ const IMAGE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif
 const FISH_AUDIO_API = 'https://api.fish.audio';
 const FISH_MAX_TEXT = 2000;
 
-// ---- Speech-to-text (bundled whisper.cpp) ----
+// ---- Vosk (optional preferred backend; whisper.cpp is the bundled fallback) ----
+// Vosk runs through the official `vosk-transcriber` CLI (pip install vosk), so no
+// native Node binding is required. Detection is fully runtime-based: when both the
+// CLI and a model folder exist we use Vosk, otherwise we fall back to whisper.cpp.
+function findVoskModel() {
+  const candidates = [];
+  if (process.env.ABG_VOSK_MODEL_DIR) candidates.push(process.env.ABG_VOSK_MODEL_DIR);
+  candidates.push(path.join(ROOT, 'vosk'), path.join(ROOT, 'desktop', 'vosk'), path.join(os.homedir(), '.cache', 'vosk'));
+  for (const base of candidates) {
+    try {
+      const entries = fs.readdirSync(base);
+      const modelDir = entries.find((entry) => /^vosk-model-/.test(entry));
+      if (modelDir) {
+        const full = path.join(base, modelDir);
+        try {
+          if (fs.statSync(full).isDirectory() && fs.statSync(path.join(full, 'am', 'final.mdl')).isFile()) return full;
+        } catch (error) { /* not a model */ }
+      }
+    } catch (error) { /* try next candidate */ }
+  }
+  return null;
+}
+
+function findVoskTranscriber() {
+  if (process.env.ABG_VOSK_TRANSCRIBER && fs.existsSync(process.env.ABG_VOSK_TRANSCRIBER)) return process.env.ABG_VOSK_TRANSCRIBER;
+  const names = process.platform === 'win32' ? ['vosk-transcriber.exe', 'vosk-transcriber.cmd'] : ['vosk-transcriber'];
+  const pathDirs = (process.env.PATH || '').split(path.delimiter);
+  for (const dir of pathDirs) {
+    if (!dir) continue;
+    for (const name of names) {
+      try {
+        const candidate = path.join(dir, name);
+        if (fs.statSync(candidate).isFile()) return candidate;
+      } catch (error) { /* keep searching */ }
+    }
+  }
+  // Per-user Python installs: AppData\\Local\\Programs\\Python\<version> and
+  // AppData\\Local\\Python\pythoncore-<version> (both hold pip console scripts).
+  for (const scriptsRoot of [
+    path.join(os.homedir(), 'AppData', 'Local', 'Programs', 'Python'),
+    path.join(os.homedir(), 'AppData', 'Local', 'Python'),
+  ]) {
+    try {
+      for (const version of fs.readdirSync(scriptsRoot)) {
+        const candidate = path.join(scriptsRoot, version, 'Scripts', 'vosk-transcriber.exe');
+        try {
+          if (fs.statSync(candidate).isFile()) return candidate;
+        } catch (error) { /* keep searching */ }
+      }
+    } catch (error) { /* keep searching */ }
+  }
+  return null;
+}
+
+// Returns the best available speech backend, or null when none is ready.
+function pickSttBackend() {
+  const voskModel = findVoskModel();
+  const voskTranscriber = findVoskTranscriber();
+  if (voskModel && voskTranscriber && !process.env.ABG_DISABLE_VOSK) {
+    return { backend: 'vosk', model: path.basename(voskModel), modelDir: voskModel, transcriber: voskTranscriber };
+  }
+  const modelPath = findWhisperModel(WHISPER_DIR);
+  const cliPath = WHISPER_DIR ? path.join(WHISPER_DIR, 'Release', 'whisper-cli.exe') : null;
+  if (modelPath && cliPath && fs.existsSync(cliPath)) {
+    return { backend: 'whisper.cpp', model: path.basename(modelPath), modelPath, cliPath };
+  }
+  return null;
+}
+
+// ---- Speech-to-text (Vosk preferred, bundled whisper.cpp fallback) ----
 // Serialized so parallel microphone uploads queue instead of thrashing the CPU.
 let sttChain = Promise.resolve();
 function queueSttTask(task) {
@@ -1240,14 +1309,50 @@ function queueSttTask(task) {
 }
 
 function sttStatusPayload() {
-  const modelPath = findWhisperModel(WHISPER_DIR);
-  const cliPath = WHISPER_DIR ? path.join(WHISPER_DIR, 'Release', 'whisper-cli.exe') : null;
-  const available = Boolean(modelPath && cliPath && fs.existsSync(cliPath));
+  const backend = pickSttBackend();
   return {
-    available,
-    backend: available ? 'whisper.cpp' : null,
-    model: modelPath ? path.basename(modelPath) : null,
+    available: Boolean(backend),
+    backend: backend ? backend.backend : null,
+    model: backend ? backend.model : null,
   };
+}
+
+// Vosk transcribes a WAV via the official CLI: -i input -o output (plain txt).
+function transcribeWithVosk(wavBuffer, transcriberPath, modelDir) {
+  if (wavBuffer.length < 44 || wavBuffer.slice(0, 4).toString('ascii') !== 'RIFF'
+    || wavBuffer.slice(8, 12).toString('ascii') !== 'WAVE') {
+    const error = new Error('Unsupported audio format — 16 kHz mono WAV expected');
+    error.code = 'STT_BAD_AUDIO';
+    throw error;
+  }
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'abg-vosk-'));
+  const wavPath = path.join(tmpDir, 'input.wav');
+  const outPath = path.join(tmpDir, 'out.txt');
+  return new Promise((resolve, reject) => {
+    const cleanup = () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* ignore */ } };
+    fs.writeFile(wavPath, wavBuffer, (writeError) => {
+      if (writeError) { cleanup(); reject(writeError); return; }
+      const child = spawn(transcriberPath, ['-m', modelDir, '-i', wavPath, '-o', outPath, '--log-level', 'ERROR'], { windowsHide: true });
+      let stderr = '';
+      const timer = setTimeout(() => { try { child.kill(); } catch (e) { /* ignore */ } }, 120000);
+      child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+      child.on('error', (spawnError) => { clearTimeout(timer); cleanup(); reject(spawnError); });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        if (code !== 0 || !fs.existsSync(outPath)) {
+          cleanup();
+          const error = new Error('vosk-transcriber exited with code ' + code + ': ' + stderr.trim().slice(-300));
+          error.code = 'STT_FAILED';
+          reject(error);
+          return;
+        }
+        let text = '';
+        try { text = fs.readFileSync(outPath, 'utf8'); } catch (e) { /* empty */ }
+        cleanup();
+        resolve(text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join(' '));
+      });
+    });
+  });
 }
 
 function transcribeWithWhisper(wavBuffer) {
@@ -1317,7 +1422,7 @@ async function handleVoiceTranscribe(req, res) {
     return;
   }
   if (!status.available) {
-    sendJson(res, 503, { error: 'Speech model not available — whisper.cpp model missing from the whisper folder', ...status });
+    sendJson(res, 503, { error: 'Speech model not available — install vosk (pip install vosk) or ensure the whisper folder is complete', ...status });
     return;
   }
   try {
@@ -1326,13 +1431,17 @@ async function handleVoiceTranscribe(req, res) {
       sendJson(res, 400, { error: 'Empty audio upload.' });
       return;
     }
-    const text = await queueSttTask(() => transcribeWithWhisper(wavBuffer));
+    const backend = pickSttBackend();
+    const transcribe = backend && backend.backend === 'vosk'
+      ? () => transcribeWithVosk(wavBuffer, backend.transcriber, backend.modelDir)
+      : () => transcribeWithWhisper(wavBuffer);
+    const text = await queueSttTask(transcribe);
     sendJson(res, 200, { text });
   } catch (error) {
     if (error && error.code === 'STT_BAD_AUDIO') {
       sendJson(res, 400, { error: error.message });
     } else if (error && error.code === 'STT_UNAVAILABLE') {
-      sendJson(res, 503, { error: 'Speech model not available — whisper.cpp model missing' });
+      sendJson(res, 503, { error: 'Speech model not available — install vosk (pip install vosk) or ensure the whisper folder is complete' });
     } else {
       sendJson(res, 500, { error: `Speech transcription failed: ${error && error.message ? error.message : error}` });
     }

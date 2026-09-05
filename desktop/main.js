@@ -77,12 +77,15 @@ function startServer() {
   logWrite(`
 --- boot ${new Date().toISOString()} port=${PORT} ---
 `);
-  // Bundled whisper.cpp STT lives next to the app resources.
-  // Packaged: <resources>/whisper    Dev: desktop/whisper
+  // Bundled speech-to-text lives next to the app resources.
+  // Packaged: <resources>/whisper + <resources>/vosk    Dev: desktop/whisper + desktop/vosk
   const WHISPER_DIR = isPackaged
     ? path.join(process.resourcesPath, 'whisper')
     : path.join(__dirname, 'whisper');
-  const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT), ABG_DATA_DIR: LOG_DIR, ABG_WHISPER_DIR: WHISPER_DIR };
+  const VOSK_MODEL_DIR = isPackaged
+    ? path.join(process.resourcesPath, 'vosk')
+    : path.join(__dirname, 'vosk');
+  const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT), ABG_DATA_DIR: LOG_DIR, ABG_WHISPER_DIR: WHISPER_DIR, ABG_VOSK_MODEL_DIR: VOSK_MODEL_DIR };
   try {
     serverProcess = spawn(process.execPath, [serverPath], {
       env,

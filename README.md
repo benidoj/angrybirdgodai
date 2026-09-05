@@ -297,6 +297,7 @@ Wenn du die App selbst neu bauen möchtest (z.B. nach Code-Änderungen):
 cd desktop
 npm install           # einmalig (~150 MB)
 npm run fetch:whisper # einmalig — lädt die Offline-Spracherkennung (whisper.cpp + Modell, ~41 MB)
+npm run fetch:vosk    # einmalig — lädt das Vosk-Modell (~40 MB, optional)
 npm run dist          # baut Installer + Portable
 # oder:
 npm run dist:portable # nur portable EXE
@@ -308,6 +309,26 @@ Google-Sprachdienst und ohne Internet funktionieren. Er ist idempotent —
 einfach erneut ausführen, wenn die Dateien fehlen oder repariert werden sollen.
 
 Die fertige EXE liegt dann unter `desktop/dist/`.
+
+### Spracherkennung: Vosk vs. Whisper
+
+Die App nutzt automatisch die **beste verfügbare** Offline-Spracherkennung:
+
+1. **Vosk** (bevorzugt) — benötigt Python + `pip install vosk` sowie das Modell
+   (`npm run fetch:vosk`). Der Server erkennt den `vosk-transcriber`-Befehl
+   automatisch und bevorzugt ihn, wenn vorhanden.
+2. **whisper.cpp** (eingebauter Fallback) — kommt mit der App und funktioniert
+   immer sofort, auch ohne Python. Wird verwendet, wenn Vosk fehlt.
+
+In den Einstellungen unter **Speech model / Sprachmodell** siehst du, welches
+Backend gerade aktiv ist (z. B. `Connected (vosk-model-small-en-us-0.15)`).
+
+```powershell
+# Vosk nachrüsten (optional, wenn bessere Erkennung gewünscht):
+python -m pip install vosk
+cd desktop
+npm run fetch:vosk
+```
 
 ### Für Freunde teilen
 
