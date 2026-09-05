@@ -303,6 +303,11 @@
     voiceTranscript: '',
     voiceFallbackReady: false,
     voiceFallbackError: false,
+    serverSttModel: null,
+    serverSttToken: 0,
+    serverWakeActive: false,
+    serverWakeToken: 0,
+    voiceAutoStopTimer: null,
     wakeMode: false,
     wakeWoken: false,
     wakeListening: false,
@@ -316,11 +321,30 @@
   };
 
   let toastTimer = null;
+  let serverCapture = null;  // active server-side voice input capture
 
   function speechTargetForVoice() {
     if (getSpeechRecognitionConstructor()) return { backend: 'browser' };
     if (state.voiceFallbackReady) return { backend: 'server', url: '/api/stt' };
     return { backend: 'none' };
+  }
+
+  async function probeServerStt() {
+    try {
+      const response = await fetch('/api/stt', { method: 'GET' });
+      const data = await response.json().catch(() => ({}));
+      const ready = Boolean(data && data.available);
+      state.voiceFallbackReady = ready;
+      state.serverSttModel = ready && data.model ? data.model : null;
+      updateSpeechControls();
+      updateVoiceUI();
+      return ready;
+    } catch (error) {
+      state.voiceFallbackReady = false;
+      updateSpeechControls();
+      updateVoiceUI();
+      return false;
+    }
   }
 
   let connectionRequest = 0;
@@ -356,6 +380,7 @@
   updateVoiceUI();
   updateWakeUI();
   checkConnection();
+  probeServerStt();
   setView('chat');
   populateSpeechVoices();
   if (isSpeechSupported() && typeof window.speechSynthesis.addEventListener === 'function') {
@@ -665,27 +690,14 @@
         setVoiceStatus('Browser voice is available — built-in speech recognition active.', 'success');
         return;
       }
-      fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ probe: true }) })
-        .then((r) => r.json().catch(() => ({})))
-        .then((data) => {
-          if (data.error && data.error.includes('not available')) {
-            statusEl.textContent = 'Not set up';
-            state.voiceFallbackReady = false;
-            updateSpeechControls();
-            setVoiceStatus('Server speech model is not set up yet. See Settings for setup instructions.', 'error');
-          } else {
-            statusEl.textContent = 'Connected';
-            state.voiceFallbackReady = true;
-            updateSpeechControls();
-            setVoiceStatus('Server speech model is connected.', 'success');
-          }
-        })
-        .catch(() => {
-          statusEl.textContent = 'Unreachable';
-          state.voiceFallbackReady = false;
-          updateSpeechControls();
-          setVoiceStatus('Server speech model check failed. Start the app and try again.', 'error');
-        });
+      statusEl.textContent = 'Checking…';
+      probeServerStt().then((ready) => {
+        statusEl.textContent = ready ? (state.serverSttModel ? `Connected (${state.serverSttModel})` : 'Connected') : 'Not set up';
+        setVoiceStatus(ready ? 'Server speech model is connected (whisper.cpp).' : 'Server speech model is not set up. See Settings for setup instructions.', ready ? 'success' : 'error');
+      }).catch(() => {
+        statusEl.textContent = 'Unreachable';
+        setVoiceStatus('Server speech model check failed. Start the app and try again.', 'error');
+      });
     });
     elements.responseStyleInput.addEventListener('change', updateGenerationPreview);
     elements.temperatureInput.addEventListener('input', updateGenerationPreview);
@@ -2878,18 +2890,23 @@
     state.voiceError = false;
 
   async function startServerVoiceInput() {
+    if (serverCapture) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      state.voiceStream = stream;
+      if (state.voiceStopRequested || !state.voiceListening) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      const capture = createServerCapture(stream);
+      serverCapture = capture;
       state.voiceRecording = true;
-      setVoiceStatus('Listening on server…', 'listening');
+      setVoiceStatus('Listening on server… speak now', 'listening');
       updateVoiceUI();
-      window.setTimeout(() => {
-        if (state.voiceRecording) {
-          stopVoiceInput();
-          setVoiceStatus('Server voice model not connected yet — start browser voice or set up Vosk.', 'error');
+      state.voiceAutoStopTimer = window.setTimeout(() => {
+        if (serverCapture && state.voiceRecording && !state.voiceStopRequested) {
+          finishServerVoiceInput();
         }
-      }, 600);
+      }, 15000);
     } catch (error) {
       state.voiceRecording = false;
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
@@ -2901,6 +2918,136 @@
       }
       updateVoiceUI();
     }
+  }
+
+  async function finishServerVoiceInput() {
+    const capture = serverCapture;
+    if (!capture) return;
+    serverCapture = null;
+    window.clearTimeout(state.voiceAutoStopTimer);
+    state.voiceRecording = false;
+    state.voiceListening = false;
+    const token = ++state.serverSttToken;
+    setVoiceStatus('Transcribing…', 'listening');
+    updateVoiceUI();
+    const chunks = capture.stop();
+    try {
+      const wavBlob = encodePcmToWav(chunks, capture.sampleRate);
+      const text = wavBlob ? await transcribeServerAudio(wavBlob, token) : '';
+      if (text) {
+        state.voiceTranscript = text;
+        const prefix = state.voiceBaseText.trim();
+        elements.messageInput.value = [prefix, text].filter(Boolean).join(prefix ? ' ' : '');
+        resizeComposer();
+        updateSendButton();
+      }
+      setVoiceStatus(text ? 'Voice captured. Press send to ask.' : 'No speech detected. Try again.', text ? 'success' : 'error');
+    } catch (error) {
+      if (!(error && error.cancelled)) {
+        setVoiceStatus(serverSttErrorMessage(error), 'error');
+      }
+    }
+    updateVoiceUI();
+  }
+
+  function cancelServerVoiceInput() {
+    const capture = serverCapture;
+    serverCapture = null;
+    window.clearTimeout(state.voiceAutoStopTimer);
+    state.voiceRecording = false;
+    if (capture) capture.stop();
+  }
+
+  function createServerCapture(stream) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const audioContext = new AudioContextClass();
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    processor.onaudioprocess = (event) => {
+      chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    };
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    return {
+      sampleRate: audioContext.sampleRate,
+      stop() {
+        try { processor.disconnect(); } catch (e) { /* ignore */ }
+        try { source.disconnect(); } catch (e) { /* ignore */ }
+        stream.getTracks().forEach((t) => t.stop());
+        try { audioContext.close(); } catch (e) { /* ignore */ }
+        return chunks;
+      },
+    };
+  }
+
+  function encodePcmToWav(chunks, sampleRateIn) {
+    let total = 0;
+    for (const chunk of chunks) total += chunk.length;
+    if (!total) return null;
+    const combined = new Float32Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
+    const targetRate = 16000;
+    const factor = Math.max(1, Math.round(sampleRateIn / targetRate));
+    const outLength = Math.floor(combined.length / factor);
+    const pcm = new Int16Array(outLength);
+    for (let i = 0; i < outLength; i += 1) {
+      let sum = 0;
+      for (let j = 0; j < factor; j += 1) sum += combined[i * factor + j];
+      const sample = sum / factor;
+      pcm[i] = Math.max(-32768, Math.min(32767, Math.round(sample * 32767)));
+    }
+    const dataSize = pcm.length * 2;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    const writeString = (v, pos, str) => {
+      for (let i = 0; i < str.length; i += 1) v.setUint8(pos + i, str.charCodeAt(i));
+    };
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, 16000, true);
+    view.setUint32(28, 32000, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+    for (let i = 0; i < pcm.length; i += 1) view.setInt16(44 + i * 2, pcm[i], true);
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  async function transcribeServerAudio(wavBlob, token) {
+    const response = await fetch('/api/stt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'audio/wav' },
+      body: wavBlob,
+    });
+    if (token !== state.serverSttToken) {
+      const error = new Error('cancelled');
+      error.cancelled = true;
+      throw error;
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data.error || 'Speech server error.');
+      error.status = response.status;
+      throw error;
+    }
+    return String(data.text || '').trim();
+  }
+
+  function serverSttErrorMessage(error) {
+    if (error && error.status === 503) return 'Server speech model is not set up — see Settings for setup instructions.';
+    if (error && error.status === 400) return 'Could not understand the audio. Try again.';
+    return 'Speech server failed. Restart the app or check the server log.';
   }
     state.voiceBaseText = elements.messageInput.value.trim();
     state.voiceTranscript = '';
@@ -2924,9 +3071,20 @@
     };
 
     recognition.onerror = (event) => {
-      state.voiceError = true;
       state.voiceListening = false;
       state.voiceRecognition = null;
+      // Browser speech service failed at runtime (offline, blocked) while the
+      // bundled whisper model is ready — seamlessly switch to the server path.
+      if ((event.error === 'network' || event.error === 'service-not-allowed' || event.error === 'language-not-supported')
+        && state.voiceFallbackReady && !serverCapture) {
+        state.voiceListening = true;
+        state.voiceStopRequested = false;
+        setVoiceStatus('Switching to server speech model…', 'listening');
+        updateVoiceUI();
+        startServerVoiceInput();
+        return;
+      }
+      state.voiceError = true;
       setVoiceStatus(voiceErrorMessage(event.error), 'error');
       updateVoiceUI();
     };
@@ -2961,6 +3119,16 @@
   }
 
   function stopVoiceInput(showStatus = true) {
+    if (serverCapture) {
+      state.voiceStopRequested = true;
+      if (showStatus) {
+        finishServerVoiceInput();
+      } else {
+        cancelServerVoiceInput();
+      }
+      updateVoiceUI();
+      return;
+    }
     const recognition = state.voiceRecognition;
     if (!recognition && !state.voiceListening) return;
     state.voiceStopRequested = true;
@@ -3049,11 +3217,11 @@
       else showToast('Wait for the current reply to finish, then turn on the wake word.');
       return;
     }
-    if (!isVoiceInputSupported()) {
+    if (speechTargetForVoice().backend === 'none') {
       updateWakeUI();
       updateVoiceUI();
-      setWakeStatus(autoStart ? 'Auto-start needs Chrome or Edge voice recognition.' : '', 'error');
-      if (!autoStart) showToast('The “Great Sage” wake word needs Chrome or Edge.');
+      setWakeStatus(autoStart ? 'Auto-start needs Chrome or Edge voice recognition or a server speech model.' : '', 'error');
+      if (!autoStart) showToast('The “Great Sage” wake word needs Chrome or Edge or a server speech model.');
       return;
     }
     stopVoiceInput(false);
@@ -3124,6 +3292,10 @@
     }
     const Recognition = getSpeechRecognitionConstructor();
     if (!Recognition) {
+      if (state.voiceFallbackReady) {
+        startServerWakeLoop();
+        return;
+      }
       if (autoStart) handleAutoWakeStartFailure('Auto-start needs Chrome or Edge voice recognition.');
       else showToast('The “Great Sage” wake word needs Chrome or Edge.');
       return;
@@ -3153,6 +3325,11 @@
     recognition.onerror = (event) => {
       state.wakeListening = false;
       state.wakeRecognition = null;
+      if ((event.error === 'network' || event.error === 'service-not-allowed' || event.error === 'language-not-supported')
+        && state.voiceFallbackReady && !state.wakeServerActive) {
+        startServerWakeLoop();
+        return;
+      }
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         const message = autoStart
           ? 'Auto-start needs microphone access. Click the waveform button once to allow it.'
@@ -3192,9 +3369,11 @@
   function pauseWakeListening() {
     window.clearTimeout(state.wakeSilenceTimer);
     window.clearTimeout(state.wakeRestartTimer);
+    state.serverWakeToken += 1;
+    state.serverWakeActive = false;
+    state.wakeListening = false;
     const recognition = state.wakeRecognition;
     state.wakeRecognition = null;
-    state.wakeListening = false;
     if (recognition) {
       try {
         recognition.stop();
@@ -3212,6 +3391,59 @@
       // startWakeListening force-clears stale speech flags itself, so one pass is enough
       if (!state.wakeListening) scheduleWakeRestart();
     }, 350);
+  }
+
+  function startServerWakeLoop() {
+    if (state.wakeServerActive || !state.wakeMode || state.busy || state.wakeWoken) return;
+    state.wakeServerActive = true;
+    state.wakeListening = true;
+    setWakeStatus("Listening for 'Great Sage'…", 'listening');
+    updateWakeUI();
+    captureWakeChunk();
+  }
+
+  function scheduleServerWakeRestart(error) {
+    window.setTimeout(() => {
+      if (!state.wakeMode || state.busy || state.wakeWoken) return;
+      state.wakeServerActive = false;
+      state.wakeListening = false;
+      updateWakeUI();
+      startWakeListening();
+    }, error ? 2000 : 200);
+  }
+
+  function captureWakeChunk() {
+    if (!state.wakeServerActive || !state.wakeMode) return;
+    const wakeLoopToken = ++state.serverWakeToken;
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      .then((stream) => {
+        const capture = createServerCapture(stream);
+        window.setTimeout(() => {
+          const wavBlob = encodePcmToWav(capture.stop(), capture.sampleRate);
+          if (!state.wakeServerActive || !state.wakeMode || state.serverWakeToken !== wakeLoopToken) return;
+          if (!wavBlob) { scheduleServerWakeRestart(); return; }
+          setWakeStatus("Listening for 'Great Sage'…", 'listening');
+          transcribeServerAudio(wavBlob, wakeLoopToken)
+            .then((text) => {
+              if (state.serverWakeToken !== wakeLoopToken) return;
+              if (text) handleWakeTranscript(text);
+              if (state.wakeMode && state.wakeServerActive) captureWakeChunk();
+            })
+            .catch((error) => {
+              if (state.serverWakeToken !== wakeLoopToken) return;
+              if (state.wakeMode) scheduleServerWakeRestart(error);
+            });
+        }, 3000);
+      })
+      .catch(() => {
+        if (state.serverWakeToken !== wakeLoopToken) return;
+        if (state.wakeMode) {
+          setWakeStatus('Microphone unavailable — wake word paused.', 'error');
+          pauseWakeListening();
+          updateWakeUI();
+          updateVoiceUI();
+        }
+      });
   }
 
   function handleWakeTranscript(transcript) {
@@ -3338,7 +3570,7 @@
   }
 
   function updateWakeUI() {
-    const supported = isVoiceInputSupported();
+    const supported = isVoiceInputSupported() || state.voiceFallbackReady;
     const active = state.wakeMode;
     elements.wakeButton.disabled = !supported;
     elements.wakeButton.classList.toggle('wake-active', active && !state.wakeWoken);
@@ -4247,7 +4479,7 @@
       const fbStatus = document.getElementById('voiceFallbackStatus');
       if (fbStatus) {
         fbStatus.textContent = state.voiceFallbackReady
-          ? 'Connected'
+          ? (state.serverSttModel ? `Connected (${state.serverSttModel})` : 'Connected')
           : (!isVoiceInputSupported()
             ? 'Not connected — browser voice unavailable and no server speech model'
             : 'Browser voice available — server model not needed');

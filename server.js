@@ -3,6 +3,8 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { exec, spawnSync } = require('child_process');
+const os = require('os');
+const { spawn } = require('child_process');
 const { URL } = require('url');
 
 const ROOT = __dirname;
@@ -29,6 +31,41 @@ function resolveWritableDir(candidate) {
 }
 const ABG_DATA_DIR = process.env.ABG_DATA_DIR
   || path.join(require('os').homedir(), '.angrybirdgodai');
+// Bundled whisper.cpp (speech-to-text). Resolution order: env override (desktop
+// main.js points at extraResources), dev folder next to server.js, repo layout.
+const WHISPER_DIR = process.env.ABG_WHISPER_DIR
+  || resolveWhisperDir();
+function resolveWhisperDir() {
+  const candidates = [
+    path.join(ROOT, 'whisper'),
+    path.join(ROOT, 'desktop', 'whisper'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.statSync(path.join(candidate, 'Release', 'whisper-cli.exe')).isFile()) return candidate;
+    } catch (error) { /* try next */ }
+  }
+  return null;
+}
+function findWhisperModel(dir) {
+  if (!dir) return null;
+  const searchDirs = [path.join(dir, 'Release'), dir];
+  const preferred = ['ggml-tiny-q5_1.bin', 'ggml-tiny.bin', 'ggml-base-q5_1.bin', 'ggml-base.bin'];
+  for (const searchDir of searchDirs) {
+    for (const name of preferred) {
+      try {
+        const modelPath = path.join(searchDir, name);
+        if (fs.statSync(modelPath).isFile()) return modelPath;
+      } catch (error) { /* keep looking */ }
+    }
+    // Fall back to whatever ggml-*.bin exists in this directory.
+    try {
+      const found = fs.readdirSync(searchDir).filter((f) => /^ggml-.*\.bin$/i.test(f)).sort();
+      if (found.length) return path.join(searchDir, found[0]);
+    } catch (error) { /* keep looking */ }
+  }
+  return null;
+}
 const PODCAST_DIR = resolveWritableDir(path.join(ROOT, 'podcasts'))
   || resolveWritableDir(path.join(ABG_DATA_DIR, 'podcasts'))
   || require('os').tmpdir();
@@ -1193,10 +1230,113 @@ const IMAGE_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif
 const FISH_AUDIO_API = 'https://api.fish.audio';
 const FISH_MAX_TEXT = 2000;
 
+// ---- Speech-to-text (bundled whisper.cpp) ----
+// Serialized so parallel microphone uploads queue instead of thrashing the CPU.
+let sttChain = Promise.resolve();
+function queueSttTask(task) {
+  const run = sttChain.then(task, task);
+  sttChain = run.catch(() => {});
+  return run;
+}
+
+function sttStatusPayload() {
+  const modelPath = findWhisperModel(WHISPER_DIR);
+  const cliPath = WHISPER_DIR ? path.join(WHISPER_DIR, 'Release', 'whisper-cli.exe') : null;
+  const available = Boolean(modelPath && cliPath && fs.existsSync(cliPath));
+  return {
+    available,
+    backend: available ? 'whisper.cpp' : null,
+    model: modelPath ? path.basename(modelPath) : null,
+  };
+}
+
+function transcribeWithWhisper(wavBuffer) {
+  const modelPath = findWhisperModel(WHISPER_DIR);
+  const cliPath = WHISPER_DIR ? path.join(WHISPER_DIR, 'Release', 'whisper-cli.exe') : null;
+  if (!modelPath || !cliPath || !fs.existsSync(cliPath)) {
+    const error = new Error('Whisper model not found');
+    error.code = 'STT_UNAVAILABLE';
+    throw error;
+  }
+  // Basic RIFF/WAVE validation so garbage never reaches the CLI.
+  if (wavBuffer.length < 44 || wavBuffer.slice(0, 4).toString('ascii') !== 'RIFF'
+    || wavBuffer.slice(8, 12).toString('ascii') !== 'WAVE') {
+    const error = new Error('Unsupported audio format — 16 kHz mono WAV expected');
+    error.code = 'STT_BAD_AUDIO';
+    throw error;
+  }
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'abg-stt-'));
+  const wavPath = path.join(tmpDir, 'input.wav');
+  return new Promise((resolve, reject) => {
+    fs.writeFile(wavPath, wavBuffer, (writeError) => {
+      if (writeError) {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+        reject(writeError);
+        return;
+      }
+      const child = spawn(cliPath, [
+        '-m', modelPath,
+        '-f', wavPath,
+        '-nt',           // no timestamps — plain text on stdout
+        '-np',           // suppress progress/log noise on stderr
+        '-l', 'auto',
+      ], { windowsHide: true });
+      let stdout = '';
+      let stderr = '';
+      const timer = setTimeout(() => {
+        try { child.kill(); } catch (e) { /* ignore */ }
+      }, 120000);
+      child.stdout.on('data', (chunk) => { stdout += chunk.toString('utf8'); });
+      child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+      child.on('error', (spawnError) => {
+        clearTimeout(timer);
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+        reject(spawnError);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+        if (code !== 0) {
+          const error = new Error(`whisper-cli exited with code ${code}: ${stderr.trim().slice(-300)}`);
+          error.code = 'STT_FAILED';
+          reject(error);
+          return;
+        }
+        resolve(stdout.replace(/\r/g, '').trim());
+      });
+    });
+  });
+}
+
 async function handleVoiceTranscribe(req, res) {
   res.setHeader("Cache-Control", "no-store");
-  res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
-  res.end(JSON.stringify({ error: "Speech model not available — enable browser voice or set up Vosk/Whisper on the server" }));
+  const status = sttStatusPayload();
+  if (req.method === 'GET' || (req.headers['content-type'] || '').includes('application/json')) {
+    // Status probe (GET, or legacy POST probe from older clients).
+    sendJson(res, status.available ? 200 : 503, status);
+    return;
+  }
+  if (!status.available) {
+    sendJson(res, 503, { error: 'Speech model not available — whisper.cpp model missing from the whisper folder', ...status });
+    return;
+  }
+  try {
+    const wavBuffer = await readRawBody(req, MAX_AUDIO_BYTES);
+    if (!wavBuffer.length) {
+      sendJson(res, 400, { error: 'Empty audio upload.' });
+      return;
+    }
+    const text = await queueSttTask(() => transcribeWithWhisper(wavBuffer));
+    sendJson(res, 200, { text });
+  } catch (error) {
+    if (error && error.code === 'STT_BAD_AUDIO') {
+      sendJson(res, 400, { error: error.message });
+    } else if (error && error.code === 'STT_UNAVAILABLE') {
+      sendJson(res, 503, { error: 'Speech model not available — whisper.cpp model missing' });
+    } else {
+      sendJson(res, 500, { error: `Speech transcription failed: ${error && error.message ? error.message : error}` });
+    }
+  }
 }
 
 async function handleFishTts(req, res) {
@@ -1625,7 +1765,7 @@ const server = http.createServer((req, res) => {
   }
 
   if (requestUrl.pathname === '/api/stt') {
-    if (req.method !== 'POST') {
+    if (req.method !== 'POST' && req.method !== 'GET') {
       sendJson(res, 405, { error: 'Method not allowed' });
       return;
     }

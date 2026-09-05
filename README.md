@@ -295,11 +295,17 @@ Wenn du die App selbst neu bauen möchtest (z.B. nach Code-Änderungen):
 
 ```powershell
 cd desktop
-npm install          # einmalig (~150 MB)
-npm run dist         # baut Installer + Portable
+npm install           # einmalig (~150 MB)
+npm run fetch:whisper # einmalig — lädt die Offline-Spracherkennung (whisper.cpp + Modell, ~41 MB)
+npm run dist          # baut Installer + Portable
 # oder:
-npm run dist:portable  # nur portable EXE
+npm run dist:portable # nur portable EXE
 ```
+
+Der Aufruf `npm run fetch:whisper` lädt die kleine Offline-Spracherkennung
+herunter, mit der das „Great Sage“-Aufwachwort und die Spracheingabe auch ohne
+Google-Sprachdienst und ohne Internet funktionieren. Er ist idempotent —
+einfach erneut ausführen, wenn die Dateien fehlen oder repariert werden sollen.
 
 Die fertige EXE liegt dann unter `desktop/dist/`.
 

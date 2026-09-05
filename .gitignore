@@ -19,3 +19,6 @@ desktop/server.js
 desktop/app.js
 desktop/styles.css
 desktop/index.html
+
+# Bundled whisper.cpp speech-to-text (fetched by `npm run fetch:whisper`)
+desktop/whisper/
